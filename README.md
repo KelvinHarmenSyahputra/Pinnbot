@@ -1,2 +1,2 @@
 # Pinnbot
-nantik
+COMMING SOON :)
