@@ -1,2 +1,2 @@
 # Pinnbot
-COMMING SOON :)
+COMING SOON :)
