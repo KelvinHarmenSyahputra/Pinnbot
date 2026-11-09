@@ -1,0 +1,9 @@
+node_modules/
+.env
+auth_info/
+auth_info_baileys/
+data/*.local.json
+temp/
+logs/
+.DS_Store
+*.log
