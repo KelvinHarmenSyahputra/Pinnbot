@@ -169,5 +169,31 @@
     "status": "completed",
     "createdAt": "2026-11-09T10:51:17.656Z",
     "completedAt": "2026-11-09T10:51:17.657Z"
+  },
+  {
+    "id": "mw9azajq",
+    "title": "Resume Jurnal Jaringan Nirkabel",
+    "deadline": "Kamis 12:00",
+    "assignedBy": "User",
+    "status": "completed",
+    "createdAt": "2026-11-09T13:34:43.238Z",
+    "completedAt": "2026-11-09T13:34:43.241Z"
+  },
+  {
+    "id": "mw9azajs",
+    "title": "Desain Antarmuka Pengguna hari Jumat",
+    "deadline": "",
+    "assignedBy": "Pacar",
+    "status": "pending",
+    "createdAt": "2026-11-09T13:34:43.240Z"
+  },
+  {
+    "id": "mw9dll9j",
+    "title": "Makalah Pancasila Bab 2",
+    "deadline": "Jumat 23:59",
+    "assignedBy": "Kelvin",
+    "status": "completed",
+    "createdAt": "2026-11-09T14:48:02.791Z",
+    "completedAt": "2026-11-09T14:48:02.792Z"
   }
 ]
