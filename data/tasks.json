@@ -16,5 +16,23 @@
     "status": "completed",
     "createdAt": "2026-11-09T10:04:06.869Z",
     "completedAt": "2026-11-09T10:04:06.870Z"
+  },
+  {
+    "id": "mw940ljo",
+    "title": "Makalah Pancasila Bab 2",
+    "deadline": "Jumat 23:59",
+    "assignedBy": "Kelvin",
+    "status": "completed",
+    "createdAt": "2026-11-09T10:19:46.836Z",
+    "completedAt": "2026-11-09T10:19:46.843Z"
+  },
+  {
+    "id": "mw941k2u",
+    "title": "Makalah Pancasila Bab 2",
+    "deadline": "Jumat 23:59",
+    "assignedBy": "Kelvin",
+    "status": "completed",
+    "createdAt": "2026-11-09T10:20:31.590Z",
+    "completedAt": "2026-11-09T10:20:31.591Z"
   }
 ]

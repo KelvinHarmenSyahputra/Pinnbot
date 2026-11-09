@@ -20,7 +20,6 @@ export async function createSticker(inputImagePath, outputFilename = `sticker_${
     '-c:v', 'libwebp',
     '-preset', 'default',
     '-loop', '0',
-    '-vsync', '0',
     outputPath
   ];
 

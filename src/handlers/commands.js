@@ -2,6 +2,7 @@ import { getActiveModel, setActiveModel, chatCompletion } from '../ai/router.js'
 import { memory } from '../ai/memory.js';
 import { taskTracker } from '../tools/tasks.js';
 import { generateHandwriting } from '../tools/handwriting.js';
+import { convertTextToPdf } from '../tools/docs.js';
 import { MOODS, getPromptEngineerPrompt } from '../ai/prompts.js';
 
 export async function handleCommand(cmdText, options = {}) {
@@ -127,6 +128,36 @@ export async function handleCommand(cmdText, options = {}) {
         type: 'image',
         path: imgPath,
         caption: '📝 Nih hasil tulisan tangan di kertas double folio bergaris! Rapi dan ga keluar margin.'
+      };
+    }
+
+    case '/pdf': {
+      if (!args) {
+        return {
+          type: 'text',
+          content: `Ketik teks yang mau dijadikan PDF, contoh:\n\`/pdf Rangkuman Jurnal Sistem Operasi | Isi materi tentang scheduling...\``
+        };
+      }
+      let title = 'Tugas Kuliah';
+      let content = args;
+      if (args.includes('|')) {
+        const split = args.split('|');
+        title = split[0].trim();
+        content = split.slice(1).join('|').trim();
+      }
+
+      // AI polish step
+      const polished = await chatCompletion(
+        `Rapikan teks berikut menjadi paragraf formal akademis yang terstruktur rapi, tanpa kata-kata pengantar/basa-basi, langsung teks intinya saja:\n\n${content}`,
+        { temperature: 0.3 }
+      );
+
+      const pdfPath = await convertTextToPdf(title, polished.reply);
+      return {
+        type: 'document',
+        path: pdfPath,
+        filename: `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`,
+        caption: `📄 *${title}*\nSudah disempurnakan dan diformat rapi jadi PDF siap kumpul!`
       };
     }
 

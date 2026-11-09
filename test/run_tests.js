@@ -73,7 +73,27 @@ async function runTests() {
   assert.strictEqual(memory.getMood(), MOODS.SENANG, 'Mood should shift to SENANG after compliments');
   console.log(`✓ Mood successfully shifted to: ${memory.getMood()}\n`);
 
-  console.log('🎉 ALL 6 TESTS PASSED SUCCESSFULLY! Everything is solid.');
+  // Test 7: Polished Academic PDF Generator (/pdf)
+  console.log('[Test 7] Testing Polished Academic PDF (/pdf)...');
+  const pdfRes = await handleCommand('/pdf Ringkasan Jaringan Komputer | Model OSI memiliki 7 lapisan mulai dari Physical layer sampai Application layer.');
+  assert.strictEqual(pdfRes.type, 'document');
+  assert.ok(fs.existsSync(pdfRes.path), 'PDF file must be generated');
+  console.log(`✓ Polished PDF OK: ${pdfRes.path}\n`);
+
+  // Test 8: Document & Media Handlers (Sticker & Word conversion)
+  console.log('[Test 8] Testing Document & Sticker handlers...');
+  const stickerRes = await processIncomingMessage({
+    chatId: 'group_test',
+    senderName: 'Kelvin',
+    text: '/stiker',
+    isGroup: true,
+    media: { type: 'image', path: imgPath }
+  });
+  assert.strictEqual(stickerRes.type, 'sticker');
+  assert.ok(fs.existsSync(stickerRes.path), 'Sticker file must exist');
+  console.log(`✓ Sticker conversion OK: ${stickerRes.path}\n`);
+
+  console.log('🎉 ALL 8 TESTS PASSED SUCCESSFULLY! All features are connected and functional.');
 }
 
 runTests().catch(err => {

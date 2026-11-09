@@ -3,6 +3,8 @@ import { handleCommand } from './commands.js';
 import { chatCompletion } from '../ai/router.js';
 import { memory } from '../ai/memory.js';
 import { taskTracker } from '../tools/tasks.js';
+import { createSticker } from '../tools/sticker.js';
+import { convertDocxToPdf, convertPdfToDocx } from '../tools/docs.js';
 import { MOODS } from '../ai/prompts.js';
 
 // FIFO queue for anti-collision
@@ -25,6 +27,38 @@ export async function processIncomingMessage(msgContext) {
   }
 
   const rawText = (text || '').trim();
+
+  // Media processing (Stickers, Word to PDF, PDF to Word)
+  const media = msgContext.media;
+  if (media) {
+    if (media.type === 'image' && (rawText.startsWith('/stiker') || rawText.includes('stiker'))) {
+      const stickerPath = await createSticker(media.path);
+      return { type: 'sticker', path: stickerPath };
+    }
+    if (media.type === 'document' && media.filename) {
+      const lowerFile = media.filename.toLowerCase();
+      if (lowerFile.endsWith('.docx')) {
+        const pdfPath = await convertDocxToPdf(media.path);
+        return {
+          type: 'document',
+          path: pdfPath,
+          filename: media.filename.replace(/\.docx$/i, '.pdf'),
+          caption: '📄 Nih file Word (.docx) udah di-convert ke PDF rapi!'
+        };
+      }
+      if (lowerFile.endsWith('.pdf') && (rawText.toLowerCase().includes('word') || rawText.toLowerCase().includes('docx') || rawText.startsWith('/word'))) {
+        const docxPath = await convertPdfToDocx(media.path);
+        return {
+          type: 'document',
+          path: docxPath,
+          filename: media.filename.replace(/\.pdf$/i, '.docx'),
+          mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          caption: '📝 Nih file PDF udah di-convert ke Word (.docx) yang bisa diedit!'
+        };
+      }
+    }
+  }
+
   if (!rawText) return null;
 
   // 2. Command check

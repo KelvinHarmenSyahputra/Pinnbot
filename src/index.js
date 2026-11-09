@@ -1,4 +1,6 @@
 import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import { config } from './config.js';
 import { processIncomingMessage } from './handlers/message.js';
 import { memory } from './ai/memory.js';
@@ -33,7 +35,8 @@ function startLocalServer() {
             text: payload.message || '',
             isGroup: payload.isGroup ?? true,
             isMentioned: payload.isMentioned ?? false,
-            isReplyToBot: payload.isReplyToBot ?? false
+            isReplyToBot: payload.isReplyToBot ?? false,
+            media: payload.media || null
           });
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -68,7 +71,7 @@ function startLocalServer() {
 async function startWhatsApp() {
   console.log('[Pinnbot] Starting Baileys WhatsApp connection...');
   try {
-    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason } = await import('@whiskeysockets/baileys');
+    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = await import('@whiskeysockets/baileys');
     const qrcode = (await import('qrcode-terminal')).default;
     const pino = (await import('pino')).default;
 
@@ -104,11 +107,39 @@ async function startWhatsApp() {
 
         const chatId = m.key.remoteJid;
         const senderName = m.pushName || 'Anon';
-        const rawText = m.message.conversation || m.message.extendedTextMessage?.text || m.message.imageMessage?.caption || '';
+        const msgType = Object.keys(m.message)[0];
 
-        const contextInfo = m.message.extendedTextMessage?.contextInfo;
+        let rawText = m.message.conversation ||
+          m.message.extendedTextMessage?.text ||
+          m.message.imageMessage?.caption ||
+          m.message.documentMessage?.caption || '';
+
+        const contextInfo = m.message[msgType]?.contextInfo || m.message.extendedTextMessage?.contextInfo;
         const isMentioned = contextInfo?.mentionedJid?.includes(sock.user?.id.split(':')[0] + '@s.whatsapp.net');
         const isReplyToBot = contextInfo?.participant === (sock.user?.id.split(':')[0] + '@s.whatsapp.net');
+
+        // Check if there is media attached
+        let media = null;
+        if (m.message.imageMessage) {
+          try {
+            const buffer = await downloadMediaMessage(m, 'buffer', {});
+            const tempPath = path.join(config.rootDir, 'temp', `img_${Date.now()}.jpg`);
+            fs.writeFileSync(tempPath, buffer);
+            media = { type: 'image', path: tempPath };
+          } catch (e) {
+            console.error('Failed to download image:', e);
+          }
+        } else if (m.message.documentMessage) {
+          try {
+            const buffer = await downloadMediaMessage(m, 'buffer', {});
+            const originalName = m.message.documentMessage.fileName || 'file.bin';
+            const tempPath = path.join(config.rootDir, 'temp', `doc_${Date.now()}_${originalName}`);
+            fs.writeFileSync(tempPath, buffer);
+            media = { type: 'document', path: tempPath, filename: originalName };
+          } catch (e) {
+            console.error('Failed to download document:', e);
+          }
+        }
 
         const result = await processIncomingMessage({
           chatId,
@@ -116,16 +147,27 @@ async function startWhatsApp() {
           text: rawText,
           isGroup: chatId.endsWith('@g.us'),
           isMentioned,
-          isReplyToBot
+          isReplyToBot,
+          media
         });
 
         if (result) {
           if (result.type === 'text') {
             await sock.sendMessage(chatId, { text: result.content }, { quoted: m });
           } else if (result.type === 'image') {
-            const fs = await import('node:fs');
             await sock.sendMessage(chatId, {
               image: fs.readFileSync(result.path),
+              caption: result.caption || ''
+            }, { quoted: m });
+          } else if (result.type === 'sticker') {
+            await sock.sendMessage(chatId, {
+              sticker: fs.readFileSync(result.path)
+            }, { quoted: m });
+          } else if (result.type === 'document') {
+            await sock.sendMessage(chatId, {
+              document: fs.readFileSync(result.path),
+              mimetype: result.mimetype || 'application/pdf',
+              fileName: result.filename || 'document.pdf',
               caption: result.caption || ''
             }, { quoted: m });
           }
