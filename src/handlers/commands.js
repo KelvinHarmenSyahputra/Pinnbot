@@ -22,7 +22,7 @@ export async function handleCommand(cmdText, options = {}) {
         content: `🤖 *Pinnbot Status*\n\n` +
           `• *Model*: \`${model}\`\n` +
           `• *Mood Saat Ini*: \`${mood.toUpperCase()}\`\n` +
-          `• *Active Memory Log*: ${memCount}/50\n` +
+          `• *Active Memory Log*: ${memCount}/30 (Counter: ${memory.totalCounter}/50)\n` +
           `• *Tugas Kuliah Pending*: ${pendingTasks} tugas\n` +
           `• *Status Sistem*: Ready 24/7 di VPS 🚀`
       };

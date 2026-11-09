@@ -26,14 +26,18 @@ export async function processIncomingMessage(msgContext) {
     return null; // Silent ignore
   }
 
-  const rawText = (text || '').trim();
+  const rawText = (typeof text === 'string' ? text : String(text || '')).trim();
 
   // Media processing (Stickers, Word to PDF, PDF to Word)
   const media = msgContext.media;
   if (media) {
     if (media.type === 'image' && (rawText.startsWith('/stiker') || rawText.includes('stiker'))) {
-      const stickerPath = await createSticker(media.path);
-      return { type: 'sticker', path: stickerPath };
+      try {
+        const stickerPath = await createSticker(media.path);
+        return { type: 'sticker', path: stickerPath };
+      } catch (err) {
+        return { type: 'text', content: `❌ Gagal convert stiker: ${err.message}` };
+      }
     }
     if (media.type === 'document' && media.filename) {
       const lowerFile = media.filename.toLowerCase();
@@ -67,8 +71,29 @@ export async function processIncomingMessage(msgContext) {
     if (cmdResult) return cmdResult;
   }
 
-  // 3. Smart Trigger: Bot only replies if addressed
   const lowerText = rawText.toLowerCase();
+
+  // 3. Natural Assignment Tracker Helper (NLP shortcuts)
+  const isTaskNlp = /^(?:(?:pinnbot|cow|cil|pin)[,\s]+)?(?:ingetin tugas|catat tugas)\b/i.test(lowerText);
+  if (isTaskNlp) {
+    const taskContent = rawText.replace(/^(?:(?:pinnbot|cow|cil|pin)[,\s]+)?(?:ingetin tugas|catat tugas)\s*/i, '').trim();
+    if (taskContent) {
+      let title = taskContent;
+      let deadline = '';
+      if (taskContent.includes('|')) {
+        const split = taskContent.split('|');
+        title = split[0].trim();
+        deadline = split[1].trim();
+      }
+      const added = taskTracker.addTask(title, deadline, senderName);
+      return {
+        type: 'text',
+        content: `✅ Siap! Tugas *"${added.title}"* ${deadline ? `(Deadline: ${deadline}) ` : ''}udah gua catet di daftar tugas. Semangat ngerjainnya!`
+      };
+    }
+  }
+
+  // 4. Smart Trigger: Bot only replies if addressed
   const nameTriggered = config.bot.names.some(name => {
     const regex = new RegExp(`\\b${name}\\b`, 'i');
     return regex.test(lowerText);
@@ -78,18 +103,6 @@ export async function processIncomingMessage(msgContext) {
   if (!shouldReply) {
     // If not addressed to bot, quietly record in background memory for context if needed
     return null;
-  }
-
-  // 4. Natural Assignment Tracker Helper (NLP shortcuts)
-  if (lowerText.startsWith('ingetin tugas') || lowerText.startsWith('catat tugas')) {
-    const taskContent = rawText.replace(/^(ingetin tugas|catat tugas)\s*/i, '').trim();
-    if (taskContent) {
-      const added = taskTracker.addTask(taskContent, '', senderName);
-      return {
-        type: 'text',
-        content: `✅ Siap! Tugas *"${added.title}"* udah gua catet di daftar tugas. Semangat ngerjainnya!`
-      };
-    }
   }
 
   // 5. Dynamic Mood Shift detector based on conversational context

@@ -25,7 +25,10 @@ export async function generateHandwriting(text, options = {}) {
       scriptPath,
       text,
       outputPath,
-      fontPath
+      fontPath,
+      name,
+      nim,
+      date
     ]);
 
     let stderr = '';

@@ -38,7 +38,8 @@ def text_to_pdf(title, text_content, output_pdf_path):
 
     story = []
     if title:
-        story.append(Paragraph(title, title_style))
+        t_safe = title.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        story.append(Paragraph(t_safe, title_style))
         story.append(Spacer(1, 0.2 * inch))
 
     for para in text_content.split('\n'):

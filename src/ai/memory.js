@@ -52,8 +52,8 @@ class MemoryManager {
     const formattedContent = senderName ? `[${senderName}]: ${content}` : content;
     this.messages.push({ role, content: formattedContent });
 
-    // Auto-clean: after 50 messages, reset recent chat log
-    if (this.totalCounter >= config.bot.maxLogResetLimit) {
+    // Auto-clean: after full turns reach 50 messages, reset recent chat log on assistant turn completion
+    if (this.totalCounter >= config.bot.maxLogResetLimit && role === 'assistant') {
       this.messages = [];
       this.totalCounter = 0;
       console.log(`[Memory] Log counter reached 50, chat window reset cleanly.`);

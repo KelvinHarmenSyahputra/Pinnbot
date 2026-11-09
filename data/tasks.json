@@ -34,5 +34,140 @@
     "status": "completed",
     "createdAt": "2026-11-09T10:20:31.590Z",
     "completedAt": "2026-11-09T10:20:31.591Z"
+  },
+  {
+    "id": "mw94hyh8",
+    "title": "Basis Data besok jam 12",
+    "deadline": "",
+    "assignedBy": "Kelvin",
+    "status": "completed",
+    "createdAt": "2026-11-09T10:33:16.748Z",
+    "completedAt": "2026-11-09T10:38:39.595Z"
+  },
+  {
+    "id": "mw94ovkb",
+    "title": "Sistem Terdistribusi Tugas 1",
+    "deadline": "Besok 23:59",
+    "assignedBy": "User",
+    "status": "completed",
+    "createdAt": "2026-11-09T10:38:39.563Z",
+    "completedAt": "2026-11-09T10:38:39.600Z"
+  },
+  {
+    "id": "mw94ovkv",
+    "title": "Basis Data besok jam 12",
+    "deadline": "",
+    "assignedBy": "Kelvin",
+    "status": "completed",
+    "createdAt": "2026-11-09T10:38:39.583Z",
+    "completedAt": "2026-11-09T10:42:52.184Z"
+  },
+  {
+    "id": "mw94ovlj",
+    "title": "<script>alert(\"XSS\")</script>",
+    "deadline": "23:59",
+    "assignedBy": "User",
+    "status": "pending",
+    "createdAt": "2026-11-09T10:38:39.607Z"
+  },
+  {
+    "id": "mw94ovlo",
+    "title": "$(rm -rf /) ; drop table tasks; --",
+    "deadline": "Besok",
+    "assignedBy": "User",
+    "status": "pending",
+    "createdAt": "2026-11-09T10:38:39.612Z"
+  },
+  {
+    "id": "mw94ovls",
+    "title": "\"''\\\\//&&",
+    "deadline": "",
+    "assignedBy": "User",
+    "status": "pending",
+    "createdAt": "2026-11-09T10:38:39.616Z"
+  },
+  {
+    "id": "mw94ovly",
+    "title": "",
+    "deadline": "",
+    "assignedBy": "User",
+    "status": "pending",
+    "createdAt": "2026-11-09T10:38:39.622Z"
+  },
+  {
+    "id": "mw94uags",
+    "title": "Sistem Terdistribusi Tugas 1",
+    "deadline": "Besok 23:59",
+    "assignedBy": "User",
+    "status": "completed",
+    "createdAt": "2026-11-09T10:42:52.156Z",
+    "completedAt": "2026-11-09T10:42:52.189Z"
+  },
+  {
+    "id": "mw94uaha",
+    "title": "Basis Data besok jam 12",
+    "deadline": "",
+    "assignedBy": "Kelvin",
+    "status": "pending",
+    "createdAt": "2026-11-09T10:42:52.174Z"
+  },
+  {
+    "id": "mw94uahu",
+    "title": "<script>alert(\"XSS\")</script>",
+    "deadline": "23:59",
+    "assignedBy": "User",
+    "status": "pending",
+    "createdAt": "2026-11-09T10:42:52.194Z"
+  },
+  {
+    "id": "mw94uahz",
+    "title": "$(rm -rf /) ; drop table tasks; --",
+    "deadline": "Besok",
+    "assignedBy": "User",
+    "status": "pending",
+    "createdAt": "2026-11-09T10:42:52.199Z"
+  },
+  {
+    "id": "mw94uai4",
+    "title": "\"''\\\\//&&",
+    "deadline": "",
+    "assignedBy": "User",
+    "status": "pending",
+    "createdAt": "2026-11-09T10:42:52.204Z"
+  },
+  {
+    "id": "mw94uai9",
+    "title": "",
+    "deadline": "",
+    "assignedBy": "User",
+    "status": "pending",
+    "createdAt": "2026-11-09T10:42:52.209Z"
+  },
+  {
+    "id": "mw94wifm",
+    "title": "Makalah Pancasila Bab 2",
+    "deadline": "Jumat 23:59",
+    "assignedBy": "Kelvin",
+    "status": "completed",
+    "createdAt": "2026-11-09T10:44:35.794Z",
+    "completedAt": "2026-11-09T10:44:35.795Z"
+  },
+  {
+    "id": "mw94wyj2",
+    "title": "Makalah Pancasila Bab 2",
+    "deadline": "Jumat 23:59",
+    "assignedBy": "Kelvin",
+    "status": "completed",
+    "createdAt": "2026-11-09T10:44:56.654Z",
+    "completedAt": "2026-11-09T10:44:56.655Z"
+  },
+  {
+    "id": "mw9554ig",
+    "title": "Makalah Pancasila Bab 2",
+    "deadline": "Jumat 23:59",
+    "assignedBy": "Kelvin",
+    "status": "completed",
+    "createdAt": "2026-11-09T10:51:17.656Z",
+    "completedAt": "2026-11-09T10:51:17.657Z"
   }
 ]

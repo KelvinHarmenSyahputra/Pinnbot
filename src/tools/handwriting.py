@@ -101,7 +101,10 @@ if __name__ == '__main__':
 
     input_text = sys.argv[1]
     out_file = sys.argv[2]
-    custom_font = sys.argv[3] if len(sys.argv) > 3 else None
+    custom_font = sys.argv[3] if len(sys.argv) > 3 and sys.argv[3] else None
+    name = sys.argv[4] if len(sys.argv) > 4 else ""
+    nim = sys.argv[5] if len(sys.argv) > 5 else ""
+    date = sys.argv[6] if len(sys.argv) > 6 else ""
 
     if os.path.exists(input_text):
         with open(input_text, 'r', encoding='utf-8') as f:
@@ -109,5 +112,5 @@ if __name__ == '__main__':
     else:
         text_content = input_text
 
-    res = render_handwriting(text_content, out_file, custom_font)
+    res = render_handwriting(text_content, out_file, custom_font, name=name, nim=nim, date=date)
     print(f"SUCCESS:{res}")

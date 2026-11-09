@@ -43,7 +43,9 @@ class TaskTracker {
   }
 
   markDone(query) {
-    const q = query.toLowerCase().trim();
+    if (!query) return null;
+    const q = String(query).toLowerCase().trim();
+    if (!q) return null;
     const task = this.tasks.find(t => 
       t.status === 'pending' && 
       (t.id === q || t.title.toLowerCase().includes(q))

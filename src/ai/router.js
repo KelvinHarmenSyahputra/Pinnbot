@@ -42,17 +42,28 @@ export async function chatCompletion(userMessage, options = {}) {
 
   const endpoint = `${config.ai.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      model: activeModel,
-      stream: false,
-      temperature,
-      messages: payloadMessages
-    }),
-    signal: AbortSignal.timeout(30000)
-  });
+  let res;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      res = await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: activeModel,
+          stream: false,
+          temperature,
+          messages: payloadMessages
+        }),
+        signal: AbortSignal.timeout(60000)
+      });
+      break;
+    } catch (err) {
+      if (attempt === 0 && (err.name === 'TimeoutError' || err.name === 'AbortError')) {
+        continue;
+      }
+      throw err;
+    }
+  }
 
   if (!res.ok) {
     const errText = await res.text();
