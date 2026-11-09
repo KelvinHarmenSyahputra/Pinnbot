@@ -8,6 +8,8 @@ export async function generateHandwriting(text, options = {}) {
     name = '',
     nim = '',
     date = '',
+    font = '',
+    paperType = 'b5',
     outputFilename = `folio_${Date.now()}.jpg`
   } = options;
 
@@ -17,18 +19,19 @@ export async function generateHandwriting(text, options = {}) {
   }
 
   const outputPath = path.join(outDir, outputFilename);
-  const fontPath = path.join(config.rootDir, 'assets', 'fonts', 'Caveat.ttf');
+  const fontPath = font ? path.join(config.rootDir, 'assets', 'fonts', font) : '';
   const scriptPath = path.join(config.rootDir, 'src', 'tools', 'handwriting.py');
 
   return new Promise((resolve, reject) => {
-    const py = spawn('python3', [
+    const py = spawn('/usr/bin/python3', [
       scriptPath,
       text,
       outputPath,
       fontPath,
       name,
       nim,
-      date
+      date,
+      paperType
     ]);
 
     let stderr = '';

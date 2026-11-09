@@ -120,14 +120,29 @@ export async function handleCommand(cmdText, options = {}) {
       if (!args) {
         return {
           type: 'text',
-          content: `Ketik teks yang mau ditulis di kertas folio setelah command, contoh:\n\`/tulis Rangkuman Sistem Operasi Bab 3...\``
+          content: `Ketik teks yang mau ditulis di kertas setelah command, contoh:\n\`/tulis Rangkuman Koperasi Bab 1...\`\n\nAtau pilih format:\n• \`/tulis b5 <teks>\` (Kertas Binder Loose Leaf B5 rapi)\n• \`/tulis sidu <teks>\` (Kertas Buku Sinar Dunia cepat)`
         };
       }
-      const imgPath = await generateHandwriting(args);
+
+      let paperType = 'b5';
+      let font = 'PlaypenSans.ttf';
+      let textContent = args;
+
+      if (args.startsWith('sidu ') || args.startsWith('folio ')) {
+        paperType = 'sidu';
+        font = 'Caveat.ttf';
+        textContent = args.replace(/^(sidu|folio)\s+/i, '');
+      } else if (args.startsWith('b5 ')) {
+        paperType = 'b5';
+        font = 'PlaypenSans.ttf';
+        textContent = args.replace(/^b5\s+/i, '');
+      }
+
+      const imgPath = await generateHandwriting(textContent, { paperType, font });
       return {
         type: 'image',
         path: imgPath,
-        caption: '📝 Nih hasil tulisan tangan di kertas double folio bergaris! Rapi dan ga keluar margin.'
+        caption: `📝 Nih hasil tulisan tangan di kertas ${paperType === 'b5' ? 'Loose Leaf B5' : 'Sinar Dunia'}! Rapi, lurus di atas garis, dan ga keluar margin.`
       };
     }
 
