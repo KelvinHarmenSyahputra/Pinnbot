@@ -1,60 +1,62 @@
 #!/usr/bin/env python3
 import sys
 import os
-import json
 import random
 import math
-from PIL import Image, ImageDraw, ImageFont, ImageChops, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..'))
 TEMPLATES_DIR = os.path.join(PROJECT_ROOT, 'assets', 'templates')
 FONTS_DIR = os.path.join(PROJECT_ROOT, 'assets', 'fonts')
 
-def load_template_and_lines():
-    template_path = os.path.join(TEMPLATES_DIR, 'sidu_hd_template.jpg')
-    lines_path = os.path.join(TEMPLATES_DIR, 'horizontal_lines.json')
-
-    if os.path.exists(template_path) and os.path.exists(lines_path):
-        paper = Image.open(template_path).convert('RGB')
-        with open(lines_path, 'r') as f:
-            lines_y = json.load(f)
+def load_canvas_and_lines():
+    flat_template = os.path.join(TEMPLATES_DIR, 'sidu_flat_hd.jpg')
+    if os.path.exists(flat_template):
+        paper = Image.open(flat_template).convert('RGB')
+        pw, ph = paper.size
+        top_margin = 180
+        line_spacing = 54
+        lines_y = list(range(top_margin, ph - 140, line_spacing))
         return paper, lines_y
 
     # Fallback clean Sinar Dunia paper
-    width, height = 1500, 2300
-    paper = Image.new('RGB', (width, height), (252, 251, 247))
+    width, height = 1600, 2400
+    paper = Image.new('RGB', (width, height), (252, 251, 246))
     draw = ImageDraw.Draw(paper)
-    lines_y = []
-    y = 176
-    while y < height - 100:
-        lines_y.append(y)
-        draw.line([(60, y), (width - 60, y)], fill=(88, 128, 168), width=2)
-        y += 50
+    line_color = (104, 143, 168)
+    line_spacing = 54
+    lines_y = list(range(180, height - 140, line_spacing))
+    for idx, ly in enumerate(lines_y):
+        draw.line([(70, ly), (width - 70, ly)], fill=line_color, width=2)
+        if idx == 0 or idx == len(lines_y) - 2:
+            for tx in range(120, width - 120, 110):
+                draw.line([(tx, ly - 5), (tx, ly + 5)], fill=line_color, width=2)
     return paper, lines_y
 
 def render_handwriting(text, output_path, font_path=None, name="", nim="", date=""):
-    paper, lines_y = load_template_and_lines()
+    paper, lines_y = load_canvas_and_lines()
     pw, ph = paper.size
 
-    # White canvas for multiply blend
-    ink_white = Image.new('RGB', (pw, ph), (255, 255, 255))
+    # Transparent RGBA ink layer
+    ink = Image.new('RGBA', (pw, ph), (255, 255, 255, 0))
 
-    # Select font: Default to authentic Indonesian student handwriting
+    # Select font: Default to authentic casual Indonesian student handwriting
     if not font_path or not os.path.exists(font_path):
-        cr2_path = os.path.join(FONTS_DIR, 'HandwritingCR-2.ttf')
-        font_path = cr2_path if os.path.exists(cr2_path) else os.path.join(FONTS_DIR, 'PatrickHand.ttf')
+        myhand_path = os.path.join(FONTS_DIR, 'My_handwriting.ttf')
+        justme_path = os.path.join(FONTS_DIR, 'JustMeAgainDownHere.ttf')
+        font_path = myhand_path if os.path.exists(myhand_path) else justme_path
 
-    font_size = 42
+    font_size = 44
     font = ImageFont.truetype(font_path, font_size) if os.path.exists(font_path) else ImageFont.load_default()
 
-    margin_left = 115
-    max_width = 1260
+    margin_left = 110
+    max_width = 1360
 
     # Clean paragraph word-wrap
     wrapped_lines = []
 
-    # Optional header injection
+    # Optional header injection if passed via CLI args
     if name or nim or date:
         header_parts = []
         if name: header_parts.append(f"Nama : {name}")
@@ -100,57 +102,56 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
         line_y = lines_y[line_idx]
 
         sent_p = random.uniform(0.92, 1.05)
-        line_drift = random.uniform(-0.0008, 0.001)
+        line_drift = random.uniform(-0.0006, 0.0008)
 
         for word in words:
             try:
                 w_len = int(font.getlength(word)) + 4
             except AttributeError:
                 w_len = len(word) * 20
-            w_h = 65
-            pad = 12
+            w_h = 60
+            pad = 10
 
-            stamp = Image.new('RGB', (w_len + pad * 2, w_h + pad * 2), (255, 255, 255))
+            stamp = Image.new('RGBA', (w_len + pad * 2, w_h + pad * 2), (255, 255, 255, 0))
             s_draw = ImageDraw.Draw(stamp)
 
             # Ballpoint gel pen ink (Standard AE7 dark charcoal blue-black)
             p = sent_p * random.uniform(0.94, 1.04)
             shade = int(22 * p)
-            ink_color = (shade, shade + 2, shade + 7)
+            ink_color = (shade, shade + 2, shade + 7, int(240 * min(1.0, p)))
 
+            # In My_handwriting at 44, bbox y1 is 35
             s_draw.text((pad, pad), word, fill=ink_color, font=font)
 
-            # Micro-rotation of the word (-0.9 to +0.9 deg)
-            rot = random.uniform(-0.9, 0.9)
+            # Word-level natural micro-rotation (-0.8 to +0.8 deg)
+            rot = random.uniform(-0.8, 0.8)
             scale = random.uniform(0.985, 1.015)
             new_sz = (int(stamp.width * scale), int(stamp.height * scale))
-            stamp_rot = stamp.resize(new_sz, Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
+            stamp_rot = stamp.resize(new_sz, Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR)
 
-            # Human baseline wave across the line
-            human_wave = math.sin((cur_x - margin_left) / 160.0) * 1.2
-            jitter_y = random.uniform(-0.7, 0.7)
-            dest_y = int(line_y - 38 - pad + human_wave + jitter_y + (cur_x - margin_left) * line_drift)
+            # Baseline: line_y - 35 aligns bottom of base letters touching the line!
+            jitter_y = random.uniform(-0.6, 0.9)
+            wave_y = math.sin((cur_x - margin_left) / 180.0) * 1.0
+            dest_y = int(line_y - 35 - pad + jitter_y + wave_y + (cur_x - margin_left) * line_drift)
             dest_x = int(cur_x - pad)
 
-            region = ink_white.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
-            blended = ImageChops.multiply(region, stamp_rot)
-            ink_white.paste(blended, (dest_x, dest_y))
+            ink.paste(stamp_rot, (dest_x, dest_y), stamp_rot)
 
             try:
                 space_len = font.getlength(' ')
             except AttributeError:
                 space_len = 12
 
-            cur_x += w_len + space_len + random.uniform(-0.8, 1.6)
+            cur_x += w_len + space_len + random.uniform(-0.8, 1.4)
 
-    # Micro ink-bleed into paper fiber
-    ink_white = ink_white.filter(ImageFilter.GaussianBlur(radius=0.35))
+    # Micro ink-bleed into paper fiber (0.28px blur)
+    ink_smooth = ink.filter(ImageFilter.GaussianBlur(radius=0.28))
 
-    # Genuine Multiply blend onto real Sinar Dunia paper
-    final_image = ImageChops.multiply(paper, ink_white)
+    # Composite onto paper
+    paper.paste(ink_smooth, (0, 0), ink_smooth)
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    final_image.save(output_path, "JPEG", quality=95)
+    paper.save(output_path, "JPEG", quality=95)
     return output_path
 
 if __name__ == '__main__':
