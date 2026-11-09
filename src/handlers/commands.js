@@ -6,9 +6,10 @@ import { convertTextToPdf } from '../tools/docs.js';
 import { MOODS, getPromptEngineerPrompt } from '../ai/prompts.js';
 
 export async function handleCommand(cmdText, options = {}) {
-  const parts = cmdText.trim().split(/\s+/);
-  const command = parts[0].toLowerCase();
-  const args = parts.slice(1).join(' ');
+  const trimmed = cmdText.trim();
+  const firstSpaceIdx = trimmed.search(/\s/);
+  const command = (firstSpaceIdx === -1 ? trimmed : trimmed.slice(0, firstSpaceIdx)).toLowerCase();
+  const args = firstSpaceIdx === -1 ? '' : trimmed.slice(firstSpaceIdx).trim();
 
   switch (command) {
     case '/status': {
@@ -120,25 +121,22 @@ export async function handleCommand(cmdText, options = {}) {
       if (!args) {
         return {
           type: 'text',
-          content: `Ketik teks yang mau ditulis di kertas setelah command, contoh:\n\`/tulis Rangkuman Koperasi Bab 1...\`\n\nAtau pilih format:\n• \`/tulis b5 <teks>\` (Kertas Binder Loose Leaf B5 rapi)\n• \`/tulis sidu <teks>\` (Kertas Buku Sinar Dunia cepat)`
+          content: `Ketik teks yang mau ditulis di kertas setelah command, contoh:\n\`/tulis Rangkuman Sosiologi...\`\n\nAtau pilih template:\n• \`/tulis sidu <teks>\` (Kertas Buku Sinar Dunia asli)\n• \`/tulis b5 <teks>\` (Kertas Loose Leaf Binder B5)`
         };
       }
 
-      let paperType = 'b5';
-      let font = 'PlaypenSans.ttf';
+      let paperType = 'sidu';
       let textContent = args;
 
       if (args.startsWith('sidu ') || args.startsWith('folio ')) {
         paperType = 'sidu';
-        font = 'Caveat.ttf';
         textContent = args.replace(/^(sidu|folio)\s+/i, '');
       } else if (args.startsWith('b5 ')) {
         paperType = 'b5';
-        font = 'PlaypenSans.ttf';
         textContent = args.replace(/^b5\s+/i, '');
       }
 
-      const imgPath = await generateHandwriting(textContent, { paperType, font });
+      const imgPath = await generateHandwriting(textContent, { paperType });
       return {
         type: 'image',
         path: imgPath,

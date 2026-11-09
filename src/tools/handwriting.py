@@ -1,172 +1,169 @@
 #!/usr/bin/env python3
 import sys
 import os
+import json
 import random
 import math
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFilter, ImageChops, ImageFont
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..'))
 TEMPLATES_DIR = os.path.join(PROJECT_ROOT, 'assets', 'templates')
 FONTS_DIR = os.path.join(PROJECT_ROOT, 'assets', 'fonts')
+RNN_DIR = os.path.join(PROJECT_ROOT, 'tools', 'rnn_handwriting')
 
-def load_canvas_and_lines(paper_type='b5'):
-    # Option 1: Loose Leaf B5 (matching authentic Indonesian student lecture notes)
-    if paper_type in ['b5', 'looseleaf', 'binder']:
-        b5_path = os.path.join(TEMPLATES_DIR, 'loose_leaf_b5.jpg')
-        if os.path.exists(b5_path):
-            paper = Image.open(b5_path).convert('RGB')
-            pw, ph = paper.size
-            top_margin = 210
-            line_spacing = 54
-            lines_y = list(range(top_margin, ph - 120, line_spacing))
-            margin_x = 220
-            return paper, lines_y, margin_x
+# Add RNN model to path
+if os.path.exists(RNN_DIR):
+    sys.path.insert(0, RNN_DIR)
 
-    # Option 2: Sinar Dunia Flat HD
-    flat_template = os.path.join(TEMPLATES_DIR, 'sidu_flat_hd.jpg')
-    if os.path.exists(flat_template):
-        paper = Image.open(flat_template).convert('RGB')
+_rnn_model = None
+def get_rnn_model():
+    global _rnn_model
+    if _rnn_model is None:
+        try:
+            import model
+            bin_path = os.path.join(RNN_DIR, 'd.bin')
+            if os.path.exists(bin_path):
+                _rnn_model = model.Model(bin_path)
+        except Exception as e:
+            print(f"Warning: could not load RNN model ({e}), falling back to font rendering.")
+    return _rnn_model
+
+def load_canvas(paper_type='sidu'):
+    # Default: Real photograph of Sinar Dunia notebook (with authentic camera lighting & texture)
+    sidu_photo = os.path.join(TEMPLATES_DIR, 'sidu_hd_template.jpg')
+    lines_json = os.path.join(TEMPLATES_DIR, 'horizontal_lines.json')
+
+    if paper_type in ['sidu', 'folio'] and os.path.exists(sidu_photo) and os.path.exists(lines_json):
+        paper = Image.open(sidu_photo).convert('RGB')
+        with open(lines_json, 'r') as f:
+            lines_y = json.load(f)
+        return paper, lines_y, 115
+
+    # Loose Leaf B5 option
+    b5_path = os.path.join(TEMPLATES_DIR, 'loose_leaf_b5.jpg')
+    if os.path.exists(b5_path):
+        paper = Image.open(b5_path).convert('RGB')
         pw, ph = paper.size
-        top_margin = 180
-        line_spacing = 54
-        lines_y = list(range(top_margin, ph - 140, line_spacing))
-        return paper, lines_y, 110
+        top_margin = 210
+        lines_y = list(range(top_margin, ph - 120, 54))
+        return paper, lines_y, 245
 
     # Fallback
-    width, height = 1600, 2400
+    width, height = 1500, 2300
     paper = Image.new('RGB', (width, height), (252, 251, 246))
     lines_y = list(range(180, height - 140, 54))
-    return paper, lines_y, 110
+    return paper, lines_y, 115
 
-def render_handwriting(text, output_path, font_path=None, name="", nim="", date="", paper_type="b5"):
-    paper, lines_y, margin_left = load_canvas_and_lines(paper_type)
+def render_handwriting(text, output_path, font_path=None, name="", nim="", date="", paper_type="sidu"):
+    paper, lines_y, content_left = load_canvas(paper_type)
     pw, ph = paper.size
 
-    ink = Image.new('RGBA', (pw, ph), (255, 255, 255, 0))
+    rnn = get_rnn_model()
 
-    # Default to PlaypenSans (or My_handwriting)
-    if not font_path or not os.path.exists(font_path):
-        playpen = os.path.join(FONTS_DIR, 'PlaypenSans.ttf')
-        myhand = os.path.join(FONTS_DIR, 'My_handwriting.ttf')
-        font_path = playpen if os.path.exists(playpen) else myhand
+    # White canvas for multiply blend
+    ink_canvas = Image.new('RGB', (pw, ph), (255, 255, 255))
+    draw_ink = ImageDraw.Draw(ink_canvas)
 
-    is_playpen = 'Playpen' in str(font_path)
-    font_size = 38 if is_playpen else 44
-    baseline_offset = 45 if is_playpen else 35
+    max_width = pw - content_left - 90
 
-    font = ImageFont.truetype(font_path, font_size) if os.path.exists(font_path) else ImageFont.load_default()
-    title_font = ImageFont.truetype(font_path, font_size + 2) if os.path.exists(font_path) else font
-
-    content_left = margin_left + 20
-    max_width = pw - content_left - 80
-
-    wrapped_lines = []
-
-    # Optional header injection
+    # Build lines with smart paragraph splitting
+    raw_lines = []
     if name or nim or date:
         header_parts = []
         if name: header_parts.append(f"Nama : {name}")
         if nim: header_parts.append(f"NIM  : {nim}")
         if date: header_parts.append(f"Tgl  : {date}")
-        wrapped_lines.append("   |   ".join(header_parts))
-        wrapped_lines.append("")
+        raw_lines.append("   |   ".join(header_parts))
+        raw_lines.append("")
 
     for para in text.split('\n'):
         p_clean = para.strip()
         if not p_clean:
-            wrapped_lines.append("")
+            raw_lines.append("")
             continue
         words = p_clean.split(' ')
         cur = []
         for w in words:
             test = ' '.join(cur + [w])
-            try:
-                w_len = font.getlength(test)
-            except AttributeError:
-                w_len = len(test) * 20
-
-            if w_len <= max_width:
+            if len(test) * 16 <= max_width:
                 cur.append(w)
             else:
-                wrapped_lines.append(' '.join(cur))
+                raw_lines.append(' '.join(cur))
                 cur = [w]
         if cur:
-            wrapped_lines.append(' '.join(cur))
+            raw_lines.append(' '.join(cur))
 
-    start_line = 0
-    for l_i, line_text in enumerate(wrapped_lines):
+    start_line = 1
+    for l_i, line_text in enumerate(raw_lines):
         line_idx = start_line + l_i
         if line_idx >= len(lines_y): break
         if not line_text.strip(): continue
 
         line_y = lines_y[line_idx]
 
-        # Centered & underlined title on first line if capitalized
-        if l_i == 0 and line_text.isupper():
-            try:
-                t_len = title_font.getlength(line_text)
-            except AttributeError:
-                t_len = len(line_text) * 22
-            t_x = int((pw - t_len) / 2)
-            t_y = line_y - baseline_offset - 1
-            draw_ink = ImageDraw.Draw(ink)
-            draw_ink.text((t_x, t_y), line_text, fill=(20, 22, 28, 245), font=title_font)
-            draw_ink.line([(t_x - 10, line_y - 2), (t_x + t_len + 10, line_y - 2)], fill=(20, 22, 28, 240), width=2)
-            continue
+        ox = content_left
+        if line_text.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
+            ox = content_left + 15
+        elif line_text.startswith(('- ', '   ', 'Jawab:')):
+            ox = content_left + 35
 
-        cur_x = content_left
-        if line_text.startswith('- ') or line_text.startswith('   '):
-            cur_x += 35
+        # Render using Alex Graves Neural Network (Style 3) if available
+        if rnn is not None:
+            # Clean text to model vocabulary
+            safe_text = ''.join(c for c in line_text if c in rnn.vocabulary or c == ' ')
+            if not safe_text.strip(): continue
 
-        words = line_text.strip().split(' ')
-        sent_p = random.uniform(0.94, 1.05)
-        line_drift = random.uniform(-0.0005, 0.0006)
+            # Try up to 5 seeds to avoid stall/glitch
+            points = None
+            pts = []
+            for seed_offset in range(5):
+                seed = random.randint(10, 999999) + seed_offset
+                budget = len(safe_text) * 75
+                pts, reason = rnn.sample(safe_text, style=3, bias=0.58, seed=seed, budget=budget)
+                if reason == 'finished':
+                    points = pts
+                    break
+            if points is None:
+                points = pts
 
-        for word in words:
-            try:
-                w_len = int(font.getlength(word)) + 4
-            except AttributeError:
-                w_len = len(word) * 20
-            w_h = 60
-            pad = 10
+            scale = 1.35
+            base_target_y = line_y - 5.0 # Base letters sit directly on the line without floating
 
-            stamp = Image.new('RGBA', (w_len + pad * 2, w_h + pad * 2), (255, 255, 255, 0))
-            s_draw = ImageDraw.Draw(stamp)
+            prev = None
+            for p in points:
+                x, y, pen_up = p[0] * scale, p[1] * scale, p[2]
+                coord = (x + ox, y + base_target_y)
 
-            # Ballpoint gel pen ink (Standard AE7 dark charcoal blue-black)
-            p = sent_p * random.uniform(0.96, 1.04)
-            shade = int(20 * p)
-            ink_color = (shade, shade + 2, shade + 7, int(240 * min(1.0, p)))
+                if prev is not None and prev[2] == 0:
+                    dx = x - prev[0] * scale
+                    dy = y - prev[1] * scale
+                    dist = math.hypot(dx, dy)
 
-            s_draw.text((pad, pad), word, fill=ink_color, font=font)
+                    # Dynamic ballpoint pen pressure
+                    stroke_w = max(1.8, min(2.5, 2.4 - dist * 0.08))
+                    # Authentic Zebra Kokoro / Joyko black gel pen color
+                    ink_color = (20, 22, 28)
 
-            # Micro-rotation of the word (-0.7 to +0.7 deg)
-            rot = random.uniform(-0.7, 0.7)
-            scale = random.uniform(0.985, 1.015)
-            new_sz = (int(stamp.width * scale), int(stamp.height * scale))
-            stamp_rot = stamp.resize(new_sz, Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR)
+                    draw_ink.line([(prev[0] * scale + ox, prev[1] * scale + base_target_y), coord], fill=ink_color, width=int(round(stroke_w)))
+                    r = stroke_w / 2.0
+                    draw_ink.ellipse([coord[0] - r, coord[1] - r, coord[0] + r, coord[1] + r], fill=ink_color)
 
-            jitter_y = random.uniform(-0.5, 0.7)
-            wave_y = math.sin((cur_x - content_left) / 180.0) * 0.8
-            dest_y = int(line_y - baseline_offset - pad + jitter_y + wave_y + (cur_x - content_left) * line_drift)
-            dest_x = int(cur_x - pad)
-
-            ink.paste(stamp_rot, (dest_x, dest_y), stamp_rot)
-
-            try:
-                space_len = font.getlength(' ')
-            except AttributeError:
-                space_len = 12
-
-            cur_x += w_len + space_len + random.uniform(-0.6, 1.2)
+                prev = p
+        else:
+            # Fallback to TTF font if RNN not available
+            font_file = os.path.join(FONTS_DIR, 'My_handwriting.ttf')
+            font = ImageFont.truetype(font_file, 44) if os.path.exists(font_file) else ImageFont.load_default()
+            draw_ink.text((ox, line_y - 35), line_text, fill=(22, 24, 30), font=font)
 
     # Micro ink-bleed into paper fiber
-    ink_smooth = ink.filter(ImageFilter.GaussianBlur(radius=0.28))
-    paper.paste(ink_smooth, (0, 0), ink_smooth)
+    ink_canvas = ink_canvas.filter(ImageFilter.GaussianBlur(radius=0.28))
+
+    # Genuine Multiply blend onto real paper photograph
+    final_image = ImageChops.multiply(paper, ink_canvas)
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    paper.save(output_path, "JPEG", quality=95)
+    final_image.save(output_path, "JPEG", quality=95)
     return output_path
 
 if __name__ == '__main__':
@@ -180,7 +177,7 @@ if __name__ == '__main__':
     name = sys.argv[4] if len(sys.argv) > 4 else ""
     nim = sys.argv[5] if len(sys.argv) > 5 else ""
     date = sys.argv[6] if len(sys.argv) > 6 else ""
-    p_type = sys.argv[7] if len(sys.argv) > 7 else "b5"
+    p_type = sys.argv[7] if len(sys.argv) > 7 else "sidu"
 
     if os.path.exists(input_text):
         with open(input_text, 'r', encoding='utf-8') as f:
