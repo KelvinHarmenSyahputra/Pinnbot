@@ -145,34 +145,37 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             words = line_text.split(' ')
             cur_x = ox
 
-            for word in words:
+            line_slant_deg = random.uniform(9.0, 13.0)
+            line_slant = math.tan(math.radians(line_slant_deg))
+
+            for w_i, word in enumerate(words):
                 if not word:
                     cur_x += int(16 * SS)
                     continue
 
-                is_isolated_or_digit = bool(re.search(r'[\d=/+]', word)) or (len(word) == 1 and word.isalpha()) or (len(word) <= 2 and not word.isalnum())
+                has_digit_or_math = bool(re.search(r'[\d=/+]', word))
 
-                if is_isolated_or_digit:
+                if has_digit_or_math:
                     for ch in word:
                         ch_w = digit_font.getlength(ch)
                         pad = 12
                         stamp = Image.new('RGB', (int(ch_w) + pad*2, 54 + pad*2), (255, 255, 255))
                         s_draw = ImageDraw.Draw(stamp)
 
-                        press = random.uniform(0.88, 1.12)
+                        press = random.uniform(0.92, 1.08)
                         ink_color = (int(14 * press), int(16 * press), int(22 * press))
                         s_draw.text((pad, pad), ch, fill=ink_color, font=digit_font)
 
-                        # Natural organic human jitter (berantakan santai mahasiswa):
-                        rot = random.uniform(-8.0, 12.0)
-                        scale_ch = random.uniform(0.92, 1.08)
+                        # Slant matching line slant
+                        rot = -line_slant_deg + random.uniform(-2.0, 2.0)
+                        scale_ch = random.uniform(0.96, 1.04)
                         new_w = int(stamp.width * SS * scale_ch)
                         new_h = int(stamp.height * SS * scale_ch)
                         stamp_rot = stamp.resize((new_w, new_h), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
 
                         cur_x_1x = cur_x / SS
                         y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x_1x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
-                        jitter_y = random.uniform(-4.0, 4.0) * SS
+                        jitter_y = random.uniform(-1.5, 1.5) * SS
                         dest_y = int((y_bottom - 46 - pad) * SS + jitter_y)
                         dest_x = int(cur_x - pad * SS)
 
@@ -180,7 +183,7 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                         blended = ImageChops.multiply(region, stamp_rot)
                         ink_canvas_ss.paste(blended, (dest_x, dest_y))
 
-                        cur_x += int((ch_w + random.uniform(3.0, 5.0)) * SS)
+                        cur_x += int((ch_w + random.uniform(2.0, 3.5)) * SS)
 
                     cur_x += int(18 * SS)
                 else:
@@ -192,9 +195,10 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                     pts = None
                     p_res = None
                     for seed_offset in range(8):
-                        seed = 1000 + l_i * 333 + seed_offset * 77 + random.randint(10, 999)
-                        budget = len(safe_text) * 80
-                        p_res, reason = rnn.sample(safe_text, style=10, bias=0.72, seed=seed, budget=budget)
+                        seed = 1000 + l_i * 333 + w_i * 77 + seed_offset * 19 + random.randint(10, 9999)
+                        budget = len(safe_text) * 85
+                        # Bias 0.40: High human organic entropy, natural stroke variation, loose student notes (anti-stiff font!)
+                        p_res, reason = rnn.sample(safe_text, style=10, bias=0.40, seed=seed, budget=budget)
                         if reason == 'finished':
                             pts = p_res
                             break
@@ -212,15 +216,22 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                     else:
                         drift = np.zeros(len(pts))
 
+                    word_jitter_y = random.uniform(-1.8, 1.8) * SS
+                    word_slant = line_slant + math.tan(math.radians(random.uniform(-1.5, 1.5)))
+
                     prev = None
                     prev_coord = None
                     for idx_p, p in enumerate(pts):
                         d_val = float(drift[idx_p])
                         corrected_y = (p[1] - d_val) * scale_y
-                        p_cur_x = p[0] * scale_x + cur_x
-                        p_cur_x_1x = p_cur_x / SS
-                        y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, p_cur_x_1x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
-                        p_cur_y = corrected_y + y_bottom * SS - 11.5 * SS
+                        raw_x = p[0] * scale_x + cur_x
+
+                        y_bottom_ss = (get_exact_line_y(lines_y, line_maps, line_idx + 1, raw_x / SS) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50) * SS
+                        p_cur_y = corrected_y + y_bottom_ss - (9.5 * SS) + word_jitter_y
+
+                        y_diff = (y_bottom_ss - 9.5 * SS) - p_cur_y
+                        p_cur_x = raw_x + y_diff * word_slant
+
                         coord = (p_cur_x, p_cur_y)
 
                         if prev is not None and prev[2] == 0 and prev_coord is not None:
@@ -245,7 +256,8 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                         prev_coord = coord
 
                     word_w = (max(pts_x) - min(pts_x)) * scale_x if len(pts_x) > 0 else 20 * SS
-                    cur_x += int(word_w + 26 * SS)
+                    gap = random.uniform(22.0, 28.0) * SS
+                    cur_x += int(word_w + gap)
 
         # Downsample back to 1x with Lanczos for photo-realistic analog edge
         ink_white = ink_canvas_ss.resize((pw, ph), Image.Resampling.LANCZOS)
