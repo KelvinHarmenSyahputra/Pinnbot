@@ -12,7 +12,30 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, '..', '..'))
 TEMPLATES_DIR = os.path.join(PROJECT_ROOT, 'assets', 'templates')
 FONTS_DIR = os.path.join(PROJECT_ROOT, 'assets', 'fonts')
+GLYPHS_DIR = os.path.join(PROJECT_ROOT, 'assets', 'glyphs')
 RNN_DIR = os.path.join(PROJECT_ROOT, 'tools', 'rnn_handwriting')
+
+# Preload user extracted handwriting glyphs
+USER_GLYPHS = {}
+if os.path.exists(GLYPHS_DIR):
+    for fn in os.listdir(GLYPHS_DIR):
+        if fn.endswith('.png'):
+            USER_GLYPHS[fn] = Image.open(os.path.join(GLYPHS_DIR, fn)).convert('RGBA')
+
+USER_SYM_MAP = {
+    ':': 'symbol_colon.png',
+    ';': 'symbol_semicolon.png',
+    ',': 'symbol_comma.png',
+    '.': 'symbol_dot.png',
+    '(': 'symbol_paren_open.png',
+    ')': 'symbol_paren_close.png',
+    '/': 'symbol_slash.png',
+    '-': 'symbol_minus.png',
+    '+': 'symbol_plus.png',
+    '=': 'symbol_equal.png',
+    '?': 'symbol_question.png',
+    '!': 'symbol_exclamation.png',
+}
 
 # Add RNN model to path
 if os.path.exists(RNN_DIR):
@@ -142,60 +165,83 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             elif l_i == 0 or line_text.startswith(('Untuk itu', 'Adapun', 'Dengan demikian')):
                 ox += 40 * SS
 
-            words = line_text.split(' ')
             cur_x = ox
-
             line_slant_deg = random.uniform(9.0, 13.0)
             line_slant = math.tan(math.radians(line_slant_deg))
 
-            for w_i, word in enumerate(words):
-                if not word:
-                    cur_x += int(16 * SS)
-                    continue
+            # Tokenize words, numbers, and symbols cleanly
+            tokens = re.findall(r'[a-zA-Z]+|[0-9]+|[^\s\w]', line_text)
 
-                has_digit_or_math = bool(re.search(r'[\d=/+]', word))
+            for tok_i, tok in enumerate(tokens):
+                # Is it a number or symbol?
+                is_user_glyph = any(c.isdigit() or c in USER_SYM_MAP for c in tok)
 
-                if has_digit_or_math:
-                    for ch in word:
-                        ch_w = digit_font.getlength(ch)
-                        pad = 12
-                        stamp = Image.new('RGB', (int(ch_w) + pad*2, 54 + pad*2), (255, 255, 255))
-                        s_draw = ImageDraw.Draw(stamp)
-
-                        press = random.uniform(0.92, 1.08)
-                        ink_color = (int(14 * press), int(16 * press), int(22 * press))
-                        s_draw.text((pad, pad), ch, fill=ink_color, font=digit_font)
-
-                        # Slant matching line slant
-                        rot = -line_slant_deg + random.uniform(-2.0, 2.0)
-                        scale_ch = random.uniform(0.96, 1.04)
-                        new_w = int(stamp.width * SS * scale_ch)
-                        new_h = int(stamp.height * SS * scale_ch)
-                        stamp_rot = stamp.resize((new_w, new_h), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
+                if is_user_glyph:
+                    scale_glyph = 1.35 * SS
+                    for ch in tok:
+                        g = None
+                        if ch.isdigit():
+                            v = random.choice(['v1', 'v2'])
+                            g = USER_GLYPHS.get(f'digit_{ch}_{v}.png')
+                        elif ch in USER_SYM_MAP:
+                            g = USER_GLYPHS.get(USER_SYM_MAP[ch])
 
                         cur_x_1x = cur_x / SS
                         y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x_1x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
-                        jitter_y = random.uniform(-1.5, 1.5) * SS
-                        dest_y = int((y_bottom - 46 - pad) * SS + jitter_y)
-                        dest_x = int(cur_x - pad * SS)
 
-                        region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
-                        blended = ImageChops.multiply(region, stamp_rot)
-                        ink_canvas_ss.paste(blended, (dest_x, dest_y))
+                        if g is not None:
+                            gw = int(g.width * scale_glyph * random.uniform(0.97, 1.03))
+                            gh = int(g.height * scale_glyph * random.uniform(0.97, 1.03))
+                            g_s = g.resize((gw, gh), Image.Resampling.BILINEAR)
+                            rot = -line_slant_deg + random.uniform(-1.5, 1.5)
+                            g_s = g_s.rotate(rot, resample=Image.Resampling.BILINEAR, expand=True)
 
-                        cur_x += int((ch_w + random.uniform(2.0, 3.5)) * SS)
+                            if ch in ['.', ',']:
+                                dest_y = int(y_bottom * SS - g_s.height + 2 * SS)
+                            elif ch in ['-', '=', '+', ':']:
+                                dest_y = int(y_bottom * SS - 22 * SS - g_s.height // 2)
+                            else: # Digits, (), ?, !, /
+                                dest_y = int(y_bottom * SS - g_s.height - 3 * SS)
 
-                    cur_x += int(18 * SS)
+                            dest_x = int(cur_x)
+                            region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + g_s.width, dest_y + g_s.height)).convert('RGBA')
+                            region.alpha_composite(g_s)
+                            ink_canvas_ss.paste(region.convert('RGB'), (dest_x, dest_y))
+
+                            cur_x += g_s.width + int(3.5 * SS)
+                        else:
+                            ch_w = digit_font.getlength(ch)
+                            pad = 12
+                            stamp = Image.new('RGB', (int(ch_w) + pad*2, 54 + pad*2), (255, 255, 255))
+                            s_draw = ImageDraw.Draw(stamp)
+                            press = random.uniform(0.92, 1.08)
+                            ink_color = (int(14 * press), int(16 * press), int(22 * press))
+                            s_draw.text((pad, pad), ch, fill=ink_color, font=digit_font)
+                            rot = -line_slant_deg + random.uniform(-2.0, 2.0)
+                            stamp_rot = stamp.resize((int(stamp.width * SS), int(stamp.height * SS)), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
+                            dest_y = int((y_bottom - 46 - pad) * SS)
+                            dest_x = int(cur_x - pad * SS)
+                            region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
+                            blended = ImageChops.multiply(region, stamp_rot)
+                            ink_canvas_ss.paste(blended, (dest_x, dest_y))
+                            cur_x += int((ch_w + 3.0) * SS)
+
+                    # Spacing after symbol/number token
+                    if tok_i + 1 < len(tokens) and tokens[tok_i+1] in ['.', ',', ')']:
+                        cur_x += int(4 * SS)
+                    else:
+                        cur_x += int(16 * SS)
+
                 else:
-                    safe_text = ''.join(c for c in word if c in rnn.vocabulary)
+                    safe_text = ''.join(c for c in tok if c in rnn.vocabulary)
                     if not safe_text:
-                        cur_x += int(24 * SS)
+                        cur_x += int(20 * SS)
                         continue
 
                     pts = None
                     p_res = None
                     for seed_offset in range(8):
-                        seed = 1000 + l_i * 333 + w_i * 77 + seed_offset * 19 + random.randint(10, 9999)
+                        seed = 1000 + l_i * 333 + tok_i * 77 + seed_offset * 19 + random.randint(10, 9999)
                         budget = len(safe_text) * 85
                         # Bias 0.40: High human organic entropy, natural stroke variation, loose student notes (anti-stiff font!)
                         p_res, reason = rnn.sample(safe_text, style=10, bias=0.40, seed=seed, budget=budget)
@@ -256,8 +302,10 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                         prev_coord = coord
 
                     word_w = (max(pts_x) - min(pts_x)) * scale_x if len(pts_x) > 0 else 20 * SS
-                    gap = random.uniform(22.0, 28.0) * SS
-                    cur_x += int(word_w + gap)
+                    if tok_i + 1 < len(tokens) and tokens[tok_i+1] in [':', ';', ',', '.', '!', '?']:
+                        cur_x += int(word_w + 6 * SS)
+                    else:
+                        cur_x += int(word_w + random.uniform(20.0, 26.0) * SS)
 
         # Downsample back to 1x with Lanczos for photo-realistic analog edge
         ink_white = ink_canvas_ss.resize((pw, ph), Image.Resampling.LANCZOS)
