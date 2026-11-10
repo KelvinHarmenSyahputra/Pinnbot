@@ -177,7 +177,7 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                 is_user_glyph = any(c.isdigit() or c in USER_SYM_MAP for c in tok)
 
                 if is_user_glyph:
-                    scale_glyph = 1.35 * SS
+                    scale_glyph = 0.95 * SS
                     for ch in tok:
                         g = None
                         if ch.isdigit():
@@ -199,7 +199,7 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                             if ch in ['.', ',']:
                                 dest_y = int(y_bottom * SS - g_s.height + 2 * SS)
                             elif ch in ['-', '=', '+', ':']:
-                                dest_y = int(y_bottom * SS - 22 * SS - g_s.height // 2)
+                                dest_y = int(y_bottom * SS - 18 * SS - g_s.height // 2)
                             else: # Digits, (), ?, !, /
                                 dest_y = int(y_bottom * SS - g_s.height - 3 * SS)
 
@@ -208,7 +208,7 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                             region.alpha_composite(g_s)
                             ink_canvas_ss.paste(region.convert('RGB'), (dest_x, dest_y))
 
-                            cur_x += g_s.width + int(3.5 * SS)
+                            cur_x += g_s.width + int(3.0 * SS)
                         else:
                             ch_w = digit_font.getlength(ch)
                             pad = 12
@@ -218,19 +218,19 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                             ink_color = (int(14 * press), int(16 * press), int(22 * press))
                             s_draw.text((pad, pad), ch, fill=ink_color, font=digit_font)
                             rot = -line_slant_deg + random.uniform(-2.0, 2.0)
-                            stamp_rot = stamp.resize((int(stamp.width * SS), int(stamp.height * SS)), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
-                            dest_y = int((y_bottom - 46 - pad) * SS)
+                            stamp_rot = stamp.resize((int(stamp.width * SS * 0.8), int(stamp.height * SS * 0.8)), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
+                            dest_y = int((y_bottom - 40 - pad) * SS)
                             dest_x = int(cur_x - pad * SS)
                             region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
                             blended = ImageChops.multiply(region, stamp_rot)
                             ink_canvas_ss.paste(blended, (dest_x, dest_y))
-                            cur_x += int((ch_w + 3.0) * SS)
+                            cur_x += int((ch_w * 0.8 + 2.5) * SS)
 
                     # Spacing after symbol/number token
                     if tok_i + 1 < len(tokens) and tokens[tok_i+1] in ['.', ',', ')']:
-                        cur_x += int(4 * SS)
+                        cur_x += int(3 * SS)
                     else:
-                        cur_x += int(16 * SS)
+                        cur_x += int(14 * SS)
 
                 else:
                     safe_text = ''.join(c for c in tok if c in rnn.vocabulary)
