@@ -26,12 +26,12 @@ def get_rnn_model():
             bin_path = os.path.join(RNN_DIR, 'd.bin')
             if os.path.exists(bin_path):
                 _rnn_model = model.Model(bin_path)
-        except Exception as e:
-            print(f"Warning: could not load RNN model ({e}), falling back to font rendering.")
+        except Exception:
+            pass
     return _rnn_model
 
 def load_canvas(paper_type='sidu'):
-    # Default: Real photograph of Sinar Dunia notebook (with authentic camera lighting & texture)
+    # Default: Real photograph of Sinar Dunia notebook
     sidu_photo = os.path.join(TEMPLATES_DIR, 'sidu_hd_template.jpg')
     lines_maps_json = os.path.join(TEMPLATES_DIR, 'horizontal_line_maps.json')
     lines_json = os.path.join(TEMPLATES_DIR, 'horizontal_lines.json')
@@ -81,65 +81,66 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
     paper, lines_y, line_maps, content_left = load_canvas(paper_type)
     pw, ph = paper.size
 
-    rnn = get_rnn_model()
-    print(f"DEBUG: rnn is {rnn}")
-
     # White canvas for multiply blend
-    ink_canvas = Image.new('RGB', (pw, ph), (255, 255, 255))
-    draw_ink = ImageDraw.Draw(ink_canvas)
+    ink_white = Image.new('RGB', (pw, ph), (255, 255, 255))
+    draw_ink = ImageDraw.Draw(ink_white)
 
-    max_width = pw - content_left - 90
+    # Choice of engine:
+    # If explicitly requested 'rnn', use Alex Graves RNN stroke generator
+    # Otherwise use clean, bold, non-cursive student print-script (PlaypenSans)
+    use_rnn = (font_path == 'rnn' or paper_type == 'rnn')
 
-    # Build lines with smart paragraph splitting
-    raw_lines = []
-    if name or nim or date:
-        header_parts = []
-        if name: header_parts.append(f"Nama : {name}")
-        if nim: header_parts.append(f"NIM  : {nim}")
-        if date: header_parts.append(f"Tgl  : {date}")
-        raw_lines.append("   |   ".join(header_parts))
-        raw_lines.append("")
+    if use_rnn and get_rnn_model() is not None:
+        rnn = get_rnn_model()
+        max_width = pw - content_left - 90
 
-    for para in text.split('\n'):
-        p_clean = para.strip()
-        if not p_clean:
+        raw_lines = []
+        if name or nim or date:
+            header_parts = []
+            if name: header_parts.append(f"Nama : {name}")
+            if nim: header_parts.append(f"NIM  : {nim}")
+            if date: header_parts.append(f"Tgl  : {date}")
+            raw_lines.append("   |   ".join(header_parts))
             raw_lines.append("")
-            continue
-        words = p_clean.split(' ')
-        cur = []
-        for w in words:
-            test = ' '.join(cur + [w])
-            if len(test) * 16 <= max_width:
-                cur.append(w)
-            else:
+
+        for para in text.split('\n'):
+            p_clean = para.strip()
+            if not p_clean:
+                raw_lines.append("")
+                continue
+            words = p_clean.split(' ')
+            cur = []
+            for w in words:
+                test = ' '.join(cur + [w])
+                if len(test) * 16 <= max_width:
+                    cur.append(w)
+                else:
+                    raw_lines.append(' '.join(cur))
+                    cur = [w]
+            if cur:
                 raw_lines.append(' '.join(cur))
-                cur = [w]
-        if cur:
-            raw_lines.append(' '.join(cur))
 
-    start_line = 1
-    for l_i, line_text in enumerate(raw_lines):
-        line_idx = start_line + l_i
-        if line_idx >= len(lines_y): break
-        if not line_text.strip(): continue
+        # Start higher up on Line 1
+        start_line = 0
+        scale = 1.35
 
-        ox = content_left
-        if line_text.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
-            ox = content_left + 15
-        elif line_text.startswith(('- ', '   ', 'Jawab:')):
-            ox = content_left + 35
-        elif l_i == 0:
-            ox = content_left + 45 # Paragraph indent
+        for l_i, line_text in enumerate(raw_lines):
+            line_idx = start_line + l_i
+            if line_idx >= len(lines_y): break
+            if not line_text.strip(): continue
 
-        # Render using Alex Graves Neural Network (Style 3) if available
-        if rnn is not None:
-            # Clean text to model vocabulary
+            ox = content_left
+            if line_text.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
+                ox = content_left + 15
+            elif line_text.startswith(('- ', '   ', 'Jawab:')):
+                ox = content_left + 35
+            elif l_i == 0:
+                ox = content_left + 40
+
             safe_text = ''.join(c for c in line_text if c in rnn.vocabulary or c == ' ')
             if not safe_text.strip(): continue
 
-            # Try up to 8 seeds to avoid stall/glitch
             points = None
-            pts = []
             for seed_offset in range(8):
                 seed = random.randint(100, 999999) + seed_offset * 77
                 budget = len(safe_text) * 75
@@ -150,7 +151,6 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             if points is None:
                 points = pts
 
-            # Quadratic baseline detrending to prevent any sagging/floating
             pts_x = np.array([p[0] for p in points])
             pts_y = np.array([p[1] for p in points])
 
@@ -158,14 +158,12 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                 poly = np.polyfit(pts_x, pts_y, 2)
                 drift = np.polyval(poly, pts_x)
             else:
-                drift = 0.0
+                drift = np.zeros(len(points))
 
-            scale = 1.35
             prev = None
             prev_coord = None
-            drift_arr = drift if isinstance(drift, np.ndarray) else np.zeros(len(points))
             for idx_p, p in enumerate(points):
-                d_val = float(drift_arr[idx_p])
+                d_val = float(drift[idx_p])
                 corrected_y = (p[1] - d_val) * scale
                 cur_x = p[0] * scale + ox
                 real_line_y = get_exact_line_y(lines_y, line_maps, line_idx, cur_x)
@@ -177,9 +175,7 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                     dy = cur_y - prev_coord[1]
                     dist = math.hypot(dx, dy)
 
-                    # Dynamic ballpoint/gel pen pressure
                     stroke_w = max(1.7, min(2.8, 2.65 - dist * 0.09))
-
                     press = random.uniform(0.95, 1.04)
                     r = int(18 * press)
                     g = int(20 * press)
@@ -189,25 +185,106 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                     rad = stroke_w / 2.0
                     draw_ink.ellipse([coord[0] - rad, coord[1] - rad, coord[0] + rad, coord[1] + rad], fill=(r, g, b))
 
-                    # Ink pooling at sharp direction changes / pen lift-off
                     if dist < 0.6 or dist > 14:
                         pr = stroke_w * 0.6
                         draw_ink.ellipse([coord[0] - pr, coord[1] - pr, coord[0] + pr, coord[1] + pr], fill=(12, 14, 18))
 
                 prev = p
                 prev_coord = coord
-        else:
-            # Fallback to TTF font if RNN not available
-            font_file = os.path.join(FONTS_DIR, 'My_handwriting.ttf')
-            font = ImageFont.truetype(font_file, 44) if os.path.exists(font_file) else ImageFont.load_default()
-            line_y = lines_y[line_idx]
-            draw_ink.text((ox, line_y - 35), line_text, fill=(22, 24, 30), font=font)
+
+    else:
+        # Authentic clean, bold student print-script (NON-CURSIVE, cetak lepas, jelas dan rapi)
+        # Default font: PlaypenSans
+        if not font_path or not os.path.exists(font_path) or font_path == 'rnn':
+            playpen = os.path.join(FONTS_DIR, 'PlaypenSans.ttf')
+            font_path = playpen if os.path.exists(playpen) else os.path.join(FONTS_DIR, 'HandwritingCR-2.ttf')
+
+        font_size = 39
+        baseline_offset = 46
+
+        font = ImageFont.truetype(font_path, font_size) if os.path.exists(font_path) else ImageFont.load_default()
+        max_width = pw - content_left - 80
+
+        wrapped_lines = []
+        if name or nim or date:
+            header_parts = []
+            if name: header_parts.append(f"Nama : {name}")
+            if nim: header_parts.append(f"NIM  : {nim}")
+            if date: header_parts.append(f"Tgl  : {date}")
+            wrapped_lines.append("   |   ".join(header_parts))
+            wrapped_lines.append("")
+
+        for para in text.split('\n'):
+            p_clean = para.strip()
+            if not p_clean:
+                wrapped_lines.append("")
+                continue
+            words = p_clean.split(' ')
+            cur = []
+            for w in words:
+                test = ' '.join(cur + [w])
+                if font.getlength(test) <= max_width:
+                    cur.append(w)
+                else:
+                    wrapped_lines.append(' '.join(cur))
+                    cur = [w]
+            if cur:
+                wrapped_lines.append(' '.join(cur))
+
+        # START AT THE VERY TOP: Line 1 (index 0, y ~ 131)
+        start_line = 0
+
+        for l_i, line_text in enumerate(wrapped_lines):
+            line_idx = start_line + l_i
+            if line_idx >= len(lines_y): break
+            if not line_text.strip(): continue
+
+            cur_x = content_left
+            if line_text.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
+                cur_x += 15
+            elif l_i == 0 or line_text.startswith(('Untuk itu', 'Adapun', 'Dengan demikian')):
+                cur_x += 40
+
+            words = line_text.split(' ')
+            sent_p = random.uniform(0.95, 1.04)
+
+            for word in words:
+                w_len = int(font.getlength(word)) + 4
+                w_h = font_size + 22
+                pad = 12
+
+                stamp = Image.new('RGB', (w_len + pad * 2, w_h + pad * 2), (255, 255, 255))
+                s_draw = ImageDraw.Draw(stamp)
+
+                # Real Zebra Kokoro / Joyko black gel pen color (#12141a)
+                p = sent_p * random.uniform(0.96, 1.04)
+                shade = int(18 * p)
+                ink_color = (shade, shade + 2, shade + 6)
+
+                s_draw.text((pad, pad), word, fill=ink_color, font=font)
+
+                # Word-level micro-rotation (-0.6 to +0.6 deg)
+                rot = random.uniform(-0.6, 0.6)
+                scale = random.uniform(0.985, 1.015)
+                new_sz = (int(stamp.width * scale), int(stamp.height * scale))
+                stamp_rot = stamp.resize(new_sz, Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
+
+                real_line_y = get_exact_line_y(lines_y, line_maps, line_idx, cur_x)
+                jitter_y = random.uniform(-0.5, 0.5)
+                dest_y = int(real_line_y - baseline_offset - pad + jitter_y)
+                dest_x = int(cur_x - pad)
+
+                region = ink_white.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
+                blended = ImageChops.multiply(region, stamp_rot)
+                ink_white.paste(blended, (dest_x, dest_y))
+
+                cur_x += w_len + font.getlength(' ') + random.uniform(-0.5, 1.2)
 
     # Micro ink-bleed into paper fiber
-    ink_canvas = ink_canvas.filter(ImageFilter.GaussianBlur(radius=0.28))
+    ink_smooth = ink_white.filter(ImageFilter.GaussianBlur(radius=0.25))
 
     # Genuine Multiply blend onto real paper photograph
-    final_image = ImageChops.multiply(paper, ink_canvas)
+    final_image = ImageChops.multiply(paper, ink_smooth)
 
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
     final_image.save(output_path, "JPEG", quality=95)
