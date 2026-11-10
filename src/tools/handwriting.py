@@ -199,8 +199,7 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             playpen = os.path.join(FONTS_DIR, 'PlaypenSans.ttf')
             font_path = playpen if os.path.exists(playpen) else os.path.join(FONTS_DIR, 'HandwritingCR-2.ttf')
 
-        font_size = 39
-        baseline_offset = 46
+        font_size = 38
 
         font = ImageFont.truetype(font_path, font_size) if os.path.exists(font_path) else ImageFont.load_default()
         max_width = pw - content_left - 80
@@ -249,36 +248,34 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             sent_p = random.uniform(0.95, 1.04)
 
             for word in words:
-                w_len = int(font.getlength(word)) + 4
-                w_h = font_size + 22
+                w_len = int(font.getlength(word)) + 6
+                w_h = font_size + 24
                 pad = 12
 
                 stamp = Image.new('RGB', (w_len + pad * 2, w_h + pad * 2), (255, 255, 255))
                 s_draw = ImageDraw.Draw(stamp)
 
-                # Real Zebra Kokoro / Joyko black gel pen color (#12141a)
-                p = sent_p * random.uniform(0.96, 1.04)
-                shade = int(18 * p)
-                ink_color = (shade, shade + 2, shade + 6)
+                # Real Zebra Kokoro / Joyko black gel pen color (#0a0a0e)
+                ink_color = (10, 10, 14)
 
-                s_draw.text((pad, pad), word, fill=ink_color, font=font)
+                s_draw.text((pad, pad), word, fill=ink_color, font=font, stroke_width=1, stroke_fill=ink_color)
 
-                # Word-level micro-rotation (-0.6 to +0.6 deg)
-                rot = random.uniform(-0.6, 0.6)
-                scale = random.uniform(0.985, 1.015)
-                new_sz = (int(stamp.width * scale), int(stamp.height * scale))
+                # Word-level micro-rotation (-0.5 to +0.5 deg)
+                rot = random.uniform(-0.5, 0.5)
+                new_sz = (int(stamp.width), int(stamp.height))
                 stamp_rot = stamp.resize(new_sz, Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
 
-                real_line_y = get_exact_line_y(lines_y, line_maps, line_idx, cur_x)
+                y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
                 jitter_y = random.uniform(-0.5, 0.5)
-                dest_y = int(real_line_y - baseline_offset - pad + jitter_y)
+                # Float ~8px above the bottom line so base letters sit right in the middle zone between upper line and lower line!
+                dest_y = int(y_bottom - 8.0 - 43 - pad + jitter_y)
                 dest_x = int(cur_x - pad)
 
                 region = ink_white.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
                 blended = ImageChops.multiply(region, stamp_rot)
                 ink_white.paste(blended, (dest_x, dest_y))
 
-                cur_x += w_len + font.getlength(' ') + random.uniform(-0.5, 1.2)
+                cur_x += w_len + font.getlength(' ') + random.uniform(-0.4, 1.0)
 
     # Micro ink-bleed into paper fiber
     ink_smooth = ink_white.filter(ImageFilter.GaussianBlur(radius=0.25))
