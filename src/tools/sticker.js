@@ -24,8 +24,10 @@ export async function createSticker(inputImagePath, outputFilename = `sticker_${
   ];
 
   return new Promise((resolve, reject) => {
-    const ffmpeg = spawn('ffmpeg', args);
+    const ffmpegPath = fs.existsSync('/usr/local/bin/ffmpeg') ? '/usr/local/bin/ffmpeg' : 'ffmpeg';
+    const ffmpeg = spawn(ffmpegPath, args);
     let stderr = '';
+    ffmpeg.on('error', err => reject(err));
     ffmpeg.stderr.on('data', d => { stderr += d.toString(); });
 
     ffmpeg.on('close', code => {

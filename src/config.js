@@ -13,7 +13,7 @@ export const config = {
   ai: {
     baseUrl: process.env.AI_BASE_URL || 'http://127.0.0.1:20852/v1',
     apiKey: process.env.AI_API_KEY || '',
-    defaultModel: process.env.AI_DEFAULT_MODEL || 'gemini/gemini-3.8-flash'
+    defaultModel: process.env.AI_DEFAULT_MODEL || 'LEAD-UTAMA'
   },
   bot: {
     allowedGroupId: process.env.ALLOWED_GROUP_ID || '',

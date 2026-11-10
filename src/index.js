@@ -103,9 +103,10 @@ async function startWhatsApp() {
     sock.ev.on('messages.upsert', async ({ messages, type }) => {
       if (type !== 'notify') return;
       for (const m of messages) {
-        if (!m.message || m.key.fromMe) continue;
+        try {
+          if (!m.message || m.key.fromMe) continue;
 
-        const chatId = m.key.remoteJid;
+          const chatId = m.key.remoteJid;
         const senderName = m.pushName || 'Anon';
         const msgType = Object.keys(m.message)[0];
 
@@ -172,7 +173,10 @@ async function startWhatsApp() {
             }, { quoted: m });
           }
         }
+      } catch (msgErr) {
+        console.error('[WhatsApp] Error handling message:', msgErr);
       }
+    }
     });
   } catch (err) {
     console.error('[WhatsApp] Failed to initialize Baileys:', err);
