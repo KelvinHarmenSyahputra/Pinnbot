@@ -255,10 +255,12 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                 stamp = Image.new('RGB', (w_len + pad * 2, w_h + pad * 2), (255, 255, 255))
                 s_draw = ImageDraw.Draw(stamp)
 
-                # Real Zebra Kokoro / Joyko black gel pen color (#0a0a0e)
-                ink_color = (10, 10, 14)
+                # Real Zebra Kokoro / Joyko regular 0.5mm gel pen (not bold)
+                p = sent_p * random.uniform(0.97, 1.03)
+                shade = int(16 * p)
+                ink_color = (shade, shade + 2, shade + 6)
 
-                s_draw.text((pad, pad), word, fill=ink_color, font=font, stroke_width=1, stroke_fill=ink_color)
+                s_draw.text((pad, pad), word, fill=ink_color, font=font)
 
                 # Word-level micro-rotation (-0.5 to +0.5 deg)
                 rot = random.uniform(-0.5, 0.5)
