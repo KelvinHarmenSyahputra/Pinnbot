@@ -51,3 +51,18 @@ export async function convertPdfToDocx(pdfPath, outputFilename = `converted_${Da
   const outDocx = path.join(TEMP_DIR, outputFilename);
   return await runPython(['pdf_to_docx', pdfPath, outDocx]);
 }
+
+export async function readPdfContent(pdfPath) {
+  if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
+  const outJson = path.join(TEMP_DIR, `pdf_text_${Date.now()}.json`);
+  try {
+    await runPython(['extract_pdf', pdfPath, outJson]);
+    if (fs.existsSync(outJson)) {
+      const data = JSON.parse(fs.readFileSync(outJson, 'utf8'));
+      return data;
+    }
+    return { totalPages: 0, text: '' };
+  } finally {
+    if (fs.existsSync(outJson)) fs.unlinkSync(outJson);
+  }
+}

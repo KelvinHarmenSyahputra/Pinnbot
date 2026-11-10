@@ -68,6 +68,25 @@ def pdf_to_docx(input_pdf, output_docx_path):
     cv.close()
     return output_docx_path
 
+def extract_pdf_text(input_pdf, max_pages=15, max_chars=12000):
+    try:
+        import pymupdf  # type: ignore
+    except ImportError:
+        import fitz as pymupdf  # type: ignore
+
+    doc = pymupdf.open(input_pdf)
+    text = ""
+    total_pages = len(doc)
+    for i in range(min(total_pages, max_pages)):
+        page_txt = doc[i].get_text()
+        if page_txt.strip():
+            text += f"[Halaman {i+1}]\n{page_txt.strip()}\n\n"
+        if len(text) > max_chars:
+            text = text[:max_chars] + "\n... (dipotong karena terlalu panjang)"
+            break
+    doc.close()
+    return total_pages, text.strip()
+
 if __name__ == '__main__':
     mode = sys.argv[1]
     if mode == 'text_to_pdf':
@@ -88,3 +107,11 @@ if __name__ == '__main__':
         out_docx = sys.argv[3]
         res = pdf_to_docx(in_pdf, out_docx)
         print(f"SUCCESS:{res}")
+    elif mode == 'extract_pdf':
+        in_pdf = sys.argv[2]
+        out_json = sys.argv[3]
+        import json
+        pages, text = extract_pdf_text(in_pdf)
+        with open(out_json, 'w', encoding='utf-8') as f:
+            json.dump({'totalPages': pages, 'text': text}, f, ensure_ascii=False)
+        print(f"SUCCESS:{out_json}")

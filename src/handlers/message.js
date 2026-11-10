@@ -4,7 +4,7 @@ import { chatCompletion } from '../ai/router.js';
 import { memory } from '../ai/memory.js';
 import { taskTracker } from '../tools/tasks.js';
 import { createSticker } from '../tools/sticker.js';
-import { convertDocxToPdf, convertPdfToDocx } from '../tools/docs.js';
+import { convertDocxToPdf, convertPdfToDocx, readPdfContent } from '../tools/docs.js';
 import { MOODS } from '../ai/prompts.js';
 
 // FIFO queue for anti-collision
@@ -50,15 +50,42 @@ export async function processIncomingMessage(msgContext) {
           caption: '📄 Nih file Word (.docx) udah di-convert ke PDF rapi!'
         };
       }
-      if (lowerFile.endsWith('.pdf') && (rawText.toLowerCase().includes('word') || rawText.toLowerCase().includes('docx') || rawText.startsWith('/word'))) {
-        const docxPath = await convertPdfToDocx(media.path);
-        return {
-          type: 'document',
-          path: docxPath,
-          filename: media.filename.replace(/\.pdf$/i, '.docx'),
-          mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-          caption: '📝 Nih file PDF udah di-convert ke Word (.docx) yang bisa diedit!'
-        };
+      if (lowerFile.endsWith('.pdf')) {
+        if (rawText.toLowerCase().includes('word') || rawText.toLowerCase().includes('docx') || rawText.startsWith('/word')) {
+          const docxPath = await convertPdfToDocx(media.path);
+          return {
+            type: 'document',
+            path: docxPath,
+            filename: media.filename.replace(/\.pdf$/i, '.docx'),
+            mimetype: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            caption: '📝 Nih file PDF udah di-convert ke Word (.docx) yang bisa diedit!'
+          };
+        }
+
+        // Read & Analyze PDF content with AI
+        try {
+          const pdfData = await readPdfContent(media.path);
+          if (!pdfData.text) {
+            return {
+              type: 'text',
+              content: '📄 File PDF ini ga ada teks digitalnya (mungkin hasil scan/foto tanpa OCR). Coba kirim PDF yang teksnya bisa diseleksi/dicopy ya!'
+            };
+          }
+
+          const userInstruction = rawText || 'Tolong baca, rangkum, dan jelaskan poin-poin penting isi dokumen ini dengan jelas dan santai.';
+          const prompt = `Pengguna mengirimkan file PDF "${media.filename}" (${pdfData.totalPages} halaman).\n\n[ISI DOKUMEN PDF]:\n${pdfData.text}\n\n[INSTRUKSI PENGGUNA]:\n${userInstruction}`;
+
+          const aiRes = await chatCompletion(prompt, { senderName });
+          return {
+            type: 'text',
+            content: `📑 *Analisis PDF: ${media.filename}* (${pdfData.totalPages} hal)\n\n${aiRes.reply}`
+          };
+        } catch (pdfErr) {
+          return {
+            type: 'text',
+            content: `❌ Gagal membaca dokumen PDF: ${pdfErr.message}`
+          };
+        }
       }
     }
   }
