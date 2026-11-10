@@ -4,6 +4,7 @@ import os
 import json
 import random
 import math
+import re
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageChops, ImageFont
 
@@ -127,6 +128,9 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
         scale_x = 2.45 * SS
         scale_y = 2.80 * SS
 
+        digit_font_path = os.path.join(FONTS_DIR, 'PlaypenSans.ttf')
+        digit_font = ImageFont.truetype(digit_font_path, 38) if os.path.exists(digit_font_path) else ImageFont.load_default()
+
         for l_i, line_text in enumerate(raw_lines):
             line_idx = start_line + l_i
             if line_idx + 1 >= len(lines_y): break
@@ -138,64 +142,97 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             elif l_i == 0 or line_text.startswith(('Untuk itu', 'Adapun', 'Dengan demikian')):
                 ox += 40 * SS
 
-            safe_text = ''.join(c for c in line_text if c in rnn.vocabulary or c == ' ')
-            if not safe_text.strip(): continue
+            words = line_text.split(' ')
+            cur_x = ox
 
-            points = None
-            for seed_offset in range(10):
-                seed = 1000 + l_i * 333 + seed_offset * 77
-                budget = len(safe_text) * 75
-                # Style 10: Natural Indonesian student print script (non-cursive, organic, human)
-                pts, reason = rnn.sample(safe_text, style=10, bias=0.72, seed=seed, budget=budget)
-                if reason == 'finished':
-                    points = pts
-                    break
-            if points is None:
-                points = pts
+            for word in words:
+                if not word: continue
 
-            pts_x = np.array([p[0] for p in points])
-            pts_y = np.array([p[1] for p in points])
+                has_digit_or_math = bool(re.search(r'[\d=/+]', word))
 
-            if len(points) > 15:
-                poly = np.polyfit(pts_x, pts_y, 2)
-                drift = np.polyval(poly, pts_x)
-            else:
-                drift = np.zeros(len(points))
+                if has_digit_or_math:
+                    w_px = digit_font.getlength(word)
+                    pad = 12
+                    stamp = Image.new('RGB', (int(w_px) + pad*2, 54 + pad*2), (255, 255, 255))
+                    s_draw = ImageDraw.Draw(stamp)
+                    s_draw.text((pad, pad), word, fill=(12, 14, 18), font=digit_font)
 
-            prev = None
-            prev_coord = None
-            for idx_p, p in enumerate(points):
-                d_val = float(drift[idx_p])
-                corrected_y = (p[1] - d_val) * scale_y
-                cur_x = p[0] * scale_x + ox
-                y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x / SS) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
-                cur_y = corrected_y + y_bottom * SS - 11.5 * SS
-                coord = (cur_x, cur_y)
+                    rot = random.uniform(-0.4, 0.4)
+                    stamp_rot = stamp.resize((stamp.width * SS, stamp.height * SS), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
 
-                if prev is not None and prev[2] == 0 and prev_coord is not None:
-                    dx = cur_x - prev_coord[0]
-                    dy = cur_y - prev_coord[1]
-                    dist = math.hypot(dx, dy)
+                    cur_x_1x = cur_x / SS
+                    y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x_1x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
+                    dest_y = int((y_bottom - 45 - pad + 1.0) * SS)
+                    dest_x = int(cur_x - pad * SS)
 
-                    is_downstroke = (dy > 0)
-                    base_w = 5.8 if is_downstroke else 4.2
-                    stroke_w = max(3.4, min(6.8, base_w - dist * 0.05))
+                    region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
+                    blended = ImageChops.multiply(region, stamp_rot)
+                    ink_canvas_ss.paste(blended, (dest_x, dest_y))
 
-                    press = random.uniform(0.95, 1.05)
-                    r = int(14 * press)
-                    g = int(16 * press)
-                    b = int(22 * press)
+                    cur_x += int((w_px + digit_font.getlength(' ')) * SS)
+                else:
+                    safe_text = ''.join(c for c in word if c in rnn.vocabulary)
+                    if not safe_text:
+                        cur_x += int(digit_font.getlength(' ') * SS)
+                        continue
 
-                    draw_ink_ss.line([prev_coord, coord], fill=(r, g, b), width=int(round(stroke_w)))
-                    rad = stroke_w / 2.0
-                    draw_ink_ss.ellipse([coord[0] - rad, coord[1] - rad, coord[0] + rad, coord[1] + rad], fill=(r, g, b))
+                    pts = None
+                    p_res = None
+                    for seed_offset in range(8):
+                        seed = 1000 + l_i * 333 + seed_offset * 77 + random.randint(10, 999)
+                        budget = len(safe_text) * 80
+                        p_res, reason = rnn.sample(safe_text, style=10, bias=0.72, seed=seed, budget=budget)
+                        if reason == 'finished':
+                            pts = p_res
+                            break
+                    if pts is None and p_res is not None:
+                        pts = p_res
+                    elif pts is None:
+                        continue
 
-                    if dist < 1.2 or dist > 26:
-                        pr = stroke_w * 0.6
-                        draw_ink_ss.ellipse([coord[0] - pr, coord[1] - pr, coord[0] + pr, coord[1] + pr], fill=(8, 10, 14))
+                    pts_x = np.array([p[0] for p in pts])
+                    pts_y = np.array([p[1] for p in pts])
 
-                prev = p
-                prev_coord = coord
+                    if len(pts) > 15:
+                        poly = np.polyfit(pts_x, pts_y, 2)
+                        drift = np.polyval(poly, pts_x)
+                    else:
+                        drift = np.zeros(len(pts))
+
+                    prev = None
+                    prev_coord = None
+                    for idx_p, p in enumerate(pts):
+                        d_val = float(drift[idx_p])
+                        corrected_y = (p[1] - d_val) * scale_y
+                        p_cur_x = p[0] * scale_x + cur_x
+                        p_cur_x_1x = p_cur_x / SS
+                        y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, p_cur_x_1x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
+                        p_cur_y = corrected_y + y_bottom * SS - 11.5 * SS
+                        coord = (p_cur_x, p_cur_y)
+
+                        if prev is not None and prev[2] == 0 and prev_coord is not None:
+                            dx = p_cur_x - prev_coord[0]
+                            dy = p_cur_y - prev_coord[1]
+                            dist = math.hypot(dx, dy)
+
+                            is_downstroke = (dy > 0)
+                            base_w = 5.6 if is_downstroke else 4.0
+                            stroke_w = max(3.2, min(6.5, base_w - dist * 0.05))
+
+                            press = random.uniform(0.95, 1.05)
+                            r = int(14 * press)
+                            g = int(16 * press)
+                            b = int(22 * press)
+
+                            draw_ink_ss.line([prev_coord, coord], fill=(r, g, b), width=int(round(stroke_w)))
+                            rad = stroke_w / 2.0
+                            draw_ink_ss.ellipse([coord[0] - rad, coord[1] - rad, coord[0] + rad, coord[1] + rad], fill=(r, g, b))
+
+                        prev = p
+                        prev_coord = coord
+
+                    word_w = (max(pts_x) - min(pts_x)) * scale_x if len(pts_x) > 0 else 20 * SS
+                    cur_x += int(word_w + digit_font.getlength(' ') * SS)
 
         # Downsample back to 1x with Lanczos for photo-realistic analog edge
         ink_white = ink_canvas_ss.resize((pw, ph), Image.Resampling.LANCZOS)
