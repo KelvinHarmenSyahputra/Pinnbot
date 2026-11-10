@@ -146,34 +146,47 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             cur_x = ox
 
             for word in words:
-                if not word: continue
+                if not word:
+                    cur_x += int(16 * SS)
+                    continue
 
-                has_digit_or_math = bool(re.search(r'[\d=/+]', word))
+                is_isolated_or_digit = bool(re.search(r'[\d=/+]', word)) or (len(word) == 1 and word.isalpha()) or (len(word) <= 2 and not word.isalnum())
 
-                if has_digit_or_math:
-                    w_px = digit_font.getlength(word)
-                    pad = 12
-                    stamp = Image.new('RGB', (int(w_px) + pad*2, 54 + pad*2), (255, 255, 255))
-                    s_draw = ImageDraw.Draw(stamp)
-                    s_draw.text((pad, pad), word, fill=(12, 14, 18), font=digit_font)
+                if is_isolated_or_digit:
+                    for ch in word:
+                        ch_w = digit_font.getlength(ch)
+                        pad = 12
+                        stamp = Image.new('RGB', (int(ch_w) + pad*2, 54 + pad*2), (255, 255, 255))
+                        s_draw = ImageDraw.Draw(stamp)
 
-                    rot = random.uniform(-0.4, 0.4)
-                    stamp_rot = stamp.resize((stamp.width * SS, stamp.height * SS), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
+                        press = random.uniform(0.88, 1.12)
+                        ink_color = (int(14 * press), int(16 * press), int(22 * press))
+                        s_draw.text((pad, pad), ch, fill=ink_color, font=digit_font)
 
-                    cur_x_1x = cur_x / SS
-                    y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x_1x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
-                    dest_y = int((y_bottom - 45 - pad + 1.0) * SS)
-                    dest_x = int(cur_x - pad * SS)
+                        # Natural organic human jitter (berantakan santai mahasiswa):
+                        rot = random.uniform(-8.0, 12.0)
+                        scale_ch = random.uniform(0.92, 1.08)
+                        new_w = int(stamp.width * SS * scale_ch)
+                        new_h = int(stamp.height * SS * scale_ch)
+                        stamp_rot = stamp.resize((new_w, new_h), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
 
-                    region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
-                    blended = ImageChops.multiply(region, stamp_rot)
-                    ink_canvas_ss.paste(blended, (dest_x, dest_y))
+                        cur_x_1x = cur_x / SS
+                        y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x_1x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
+                        jitter_y = random.uniform(-4.0, 4.0) * SS
+                        dest_y = int((y_bottom - 46 - pad) * SS + jitter_y)
+                        dest_x = int(cur_x - pad * SS)
 
-                    cur_x += int((w_px + digit_font.getlength(' ')) * SS)
+                        region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
+                        blended = ImageChops.multiply(region, stamp_rot)
+                        ink_canvas_ss.paste(blended, (dest_x, dest_y))
+
+                        cur_x += int((ch_w + random.uniform(3.0, 5.0)) * SS)
+
+                    cur_x += int(18 * SS)
                 else:
                     safe_text = ''.join(c for c in word if c in rnn.vocabulary)
                     if not safe_text:
-                        cur_x += int(digit_font.getlength(' ') * SS)
+                        cur_x += int(24 * SS)
                         continue
 
                     pts = None
@@ -232,7 +245,7 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                         prev_coord = coord
 
                     word_w = (max(pts_x) - min(pts_x)) * scale_x if len(pts_x) > 0 else 20 * SS
-                    cur_x += int(word_w + digit_font.getlength(' ') * SS)
+                    cur_x += int(word_w + 26 * SS)
 
         # Downsample back to 1x with Lanczos for photo-realistic analog edge
         ink_white = ink_canvas_ss.resize((pw, ph), Image.Resampling.LANCZOS)
