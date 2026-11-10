@@ -119,26 +119,57 @@ async function startWhatsApp() {
         const isMentioned = contextInfo?.mentionedJid?.includes(sock.user?.id.split(':')[0] + '@s.whatsapp.net');
         const isReplyToBot = contextInfo?.participant === (sock.user?.id.split(':')[0] + '@s.whatsapp.net');
 
-        // Check if there is media attached
+        // Check if there is media attached directly or in quoted message
         let media = null;
-        if (m.message.imageMessage) {
+
+        const directDoc = m.message.documentMessage || m.message.documentWithCaptionMessage?.message?.documentMessage;
+        const directImg = m.message.imageMessage || m.message.viewOnceMessage?.message?.imageMessage;
+
+        const quotedMsg = contextInfo?.quotedMessage;
+        const quotedDoc = quotedMsg?.documentMessage || quotedMsg?.documentWithCaptionMessage?.message?.documentMessage;
+        const quotedImg = quotedMsg?.imageMessage || quotedMsg?.viewOnceMessage?.message?.imageMessage;
+
+        const docMsg = directDoc || quotedDoc;
+        const imgMsg = directImg || quotedImg;
+
+        if (docMsg) {
           try {
-            const buffer = await downloadMediaMessage(m, 'buffer', {});
-            const tempPath = path.join(config.rootDir, 'temp', `img_${Date.now()}.jpg`);
-            fs.writeFileSync(tempPath, buffer);
-            media = { type: 'image', path: tempPath };
-          } catch (e) {
-            console.error('Failed to download image:', e);
-          }
-        } else if (m.message.documentMessage) {
-          try {
-            const buffer = await downloadMediaMessage(m, 'buffer', {});
-            const originalName = m.message.documentMessage.fileName || 'file.bin';
+            const targetMsg = directDoc ? m : {
+              key: {
+                id: contextInfo.stanzaId,
+                remoteJid: chatId,
+                participant: contextInfo.participant
+              },
+              message: { documentMessage: docMsg }
+            };
+            const buffer = await downloadMediaMessage(targetMsg, 'buffer', {}, {
+              reuploadRequest: sock.updateMediaMessage
+            });
+            const originalName = docMsg.fileName || 'file.bin';
             const tempPath = path.join(config.rootDir, 'temp', `doc_${Date.now()}_${originalName}`);
             fs.writeFileSync(tempPath, buffer);
             media = { type: 'document', path: tempPath, filename: originalName };
           } catch (e) {
             console.error('Failed to download document:', e);
+          }
+        } else if (imgMsg) {
+          try {
+            const targetMsg = directImg ? m : {
+              key: {
+                id: contextInfo.stanzaId,
+                remoteJid: chatId,
+                participant: contextInfo.participant
+              },
+              message: { imageMessage: imgMsg }
+            };
+            const buffer = await downloadMediaMessage(targetMsg, 'buffer', {}, {
+              reuploadRequest: sock.updateMediaMessage
+            });
+            const tempPath = path.join(config.rootDir, 'temp', `img_${Date.now()}.jpg`);
+            fs.writeFileSync(tempPath, buffer);
+            media = { type: 'image', path: tempPath };
+          } catch (e) {
+            console.error('Failed to download image:', e);
           }
         }
 
