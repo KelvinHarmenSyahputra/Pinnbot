@@ -34,10 +34,14 @@ export async function generateHandwriting(text, options = {}) {
       paperType
     ]);
 
+    let stdout = '';
     let stderr = '';
+    py.stdout.on('data', d => { stdout += d.toString(); });
     py.stderr.on('data', d => { stderr += d.toString(); });
 
     py.on('close', code => {
+      console.log("PY_STDOUT:", stdout.trim());
+      if (stderr) console.error("PY_STDERR:", stderr.trim());
       if (code === 0 && fs.existsSync(outputPath)) {
         resolve(outputPath);
       } else {

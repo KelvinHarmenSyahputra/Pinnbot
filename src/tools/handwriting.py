@@ -85,14 +85,12 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
     ink_white = Image.new('RGB', (pw, ph), (255, 255, 255))
     draw_ink = ImageDraw.Draw(ink_white)
 
-    # Choice of engine:
-    # If explicitly requested 'rnn', use Alex Graves RNN stroke generator
-    # Otherwise use clean, bold, non-cursive student print-script (PlaypenSans)
-    use_rnn = (font_path == 'rnn' or paper_type == 'rnn')
+    rnn = get_rnn_model()
+    use_rnn = (font_path != 'font' and rnn is not None)
 
-    if use_rnn and get_rnn_model() is not None:
-        rnn = get_rnn_model()
-        max_width = pw - content_left - 90
+    if use_rnn and rnn is not None:
+        print("ENGINE: USING NEURAL NETWORK RNN (ALEX GRAVES STYLE 10)")
+        max_width = pw - content_left - 80
 
         raw_lines = []
         if name or nim or date:
@@ -112,7 +110,7 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             cur = []
             for w in words:
                 test = ' '.join(cur + [w])
-                if len(test) * 16 <= max_width:
+                if len(test) * 23.5 <= max_width:
                     cur.append(w)
                 else:
                     raw_lines.append(' '.join(cur))
@@ -120,31 +118,35 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             if cur:
                 raw_lines.append(' '.join(cur))
 
-        # Start higher up on Line 1
+        # Start higher up on Line 1 with 2x supersampling
+        SS = 2
+        ink_canvas_ss = Image.new('RGB', (pw * SS, ph * SS), (255, 255, 255))
+        draw_ink_ss = ImageDraw.Draw(ink_canvas_ss)
+
         start_line = 0
-        scale = 1.35
+        scale_x = 2.45 * SS
+        scale_y = 2.80 * SS
 
         for l_i, line_text in enumerate(raw_lines):
             line_idx = start_line + l_i
-            if line_idx >= len(lines_y): break
+            if line_idx + 1 >= len(lines_y): break
             if not line_text.strip(): continue
 
-            ox = content_left
-            if line_text.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
-                ox = content_left + 15
-            elif line_text.startswith(('- ', '   ', 'Jawab:')):
-                ox = content_left + 35
-            elif l_i == 0:
-                ox = content_left + 40
+            ox = content_left * SS
+            if line_text.startswith(('1.', '2.', '3.', '4.', '5.')):
+                ox += 15 * SS
+            elif l_i == 0 or line_text.startswith(('Untuk itu', 'Adapun', 'Dengan demikian')):
+                ox += 40 * SS
 
             safe_text = ''.join(c for c in line_text if c in rnn.vocabulary or c == ' ')
             if not safe_text.strip(): continue
 
             points = None
-            for seed_offset in range(8):
-                seed = random.randint(100, 999999) + seed_offset * 77
+            for seed_offset in range(10):
+                seed = 1000 + l_i * 333 + seed_offset * 77
                 budget = len(safe_text) * 75
-                pts, reason = rnn.sample(safe_text, style=3, bias=0.65, seed=seed, budget=budget)
+                # Style 10: Natural Indonesian student print script (non-cursive, organic, human)
+                pts, reason = rnn.sample(safe_text, style=10, bias=0.72, seed=seed, budget=budget)
                 if reason == 'finished':
                     points = pts
                     break
@@ -164,10 +166,10 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
             prev_coord = None
             for idx_p, p in enumerate(points):
                 d_val = float(drift[idx_p])
-                corrected_y = (p[1] - d_val) * scale
-                cur_x = p[0] * scale + ox
-                real_line_y = get_exact_line_y(lines_y, line_maps, line_idx, cur_x)
-                cur_y = corrected_y + real_line_y - 3.0
+                corrected_y = (p[1] - d_val) * scale_y
+                cur_x = p[0] * scale_x + ox
+                y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x / SS) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
+                cur_y = corrected_y + y_bottom * SS - 11.5 * SS
                 coord = (cur_x, cur_y)
 
                 if prev is not None and prev[2] == 0 and prev_coord is not None:
@@ -175,24 +177,31 @@ def render_handwriting(text, output_path, font_path=None, name="", nim="", date=
                     dy = cur_y - prev_coord[1]
                     dist = math.hypot(dx, dy)
 
-                    stroke_w = max(1.7, min(2.8, 2.65 - dist * 0.09))
-                    press = random.uniform(0.95, 1.04)
-                    r = int(18 * press)
-                    g = int(20 * press)
-                    b = int(26 * press)
+                    is_downstroke = (dy > 0)
+                    base_w = 5.8 if is_downstroke else 4.2
+                    stroke_w = max(3.4, min(6.8, base_w - dist * 0.05))
 
-                    draw_ink.line([prev_coord, coord], fill=(r, g, b), width=int(round(stroke_w)))
+                    press = random.uniform(0.95, 1.05)
+                    r = int(14 * press)
+                    g = int(16 * press)
+                    b = int(22 * press)
+
+                    draw_ink_ss.line([prev_coord, coord], fill=(r, g, b), width=int(round(stroke_w)))
                     rad = stroke_w / 2.0
-                    draw_ink.ellipse([coord[0] - rad, coord[1] - rad, coord[0] + rad, coord[1] + rad], fill=(r, g, b))
+                    draw_ink_ss.ellipse([coord[0] - rad, coord[1] - rad, coord[0] + rad, coord[1] + rad], fill=(r, g, b))
 
-                    if dist < 0.6 or dist > 14:
+                    if dist < 1.2 or dist > 26:
                         pr = stroke_w * 0.6
-                        draw_ink.ellipse([coord[0] - pr, coord[1] - pr, coord[0] + pr, coord[1] + pr], fill=(12, 14, 18))
+                        draw_ink_ss.ellipse([coord[0] - pr, coord[1] - pr, coord[0] + pr, coord[1] + pr], fill=(8, 10, 14))
 
                 prev = p
                 prev_coord = coord
 
+        # Downsample back to 1x with Lanczos for photo-realistic analog edge
+        ink_white = ink_canvas_ss.resize((pw, ph), Image.Resampling.LANCZOS)
+
     else:
+        print("ENGINE: USING FONT FALLBACK")
         # Authentic clean, bold student print-script (NON-CURSIVE, cetak lepas, jelas dan rapi)
         # Default font: PlaypenSans
         if not font_path or not os.path.exists(font_path) or font_path == 'rnn':
