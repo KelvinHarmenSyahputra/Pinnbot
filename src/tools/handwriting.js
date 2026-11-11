@@ -42,11 +42,21 @@ export async function generateHandwriting(text, options = {}) {
     py.on('close', code => {
       console.log("PY_STDOUT:", stdout.trim());
       if (stderr) console.error("PY_STDERR:", stderr.trim());
-      if (code === 0 && fs.existsSync(outputPath)) {
-        resolve(outputPath);
-      } else {
-        reject(new Error(`Handwriting generation failed (code ${code}): ${stderr}`));
+      if (code === 0) {
+        const match = stdout.match(/SUCCESS:(.+)/);
+        if (match) {
+          const files = match[1].trim().split(',').map(f => f.trim()).filter(f => fs.existsSync(f));
+          if (files.length > 1) {
+            return resolve(files);
+          } else if (files.length === 1) {
+            return resolve(files[0]);
+          }
+        }
+        if (fs.existsSync(outputPath)) {
+          return resolve(outputPath);
+        }
       }
+      reject(new Error(`Handwriting generation failed (code ${code}): ${stderr}`));
     });
   });
 }

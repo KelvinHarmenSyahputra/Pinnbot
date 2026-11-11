@@ -1,0 +1,22 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "[Kelvin]: , jelasin singkat apa itu dead lock dalam sistem operasi dong"
+    },
+    {
+      "role": "assistant",
+      "content": "**Deadlock** = kondisi di mana beberapa proses saling nunggu satu sama lain selamanya, ga ada yang bisa lanjut.\n\n---\n\n**Analogi gampang:**\n> Kel lagi pegang **garpu**, nunggu **sendok** dari pacarnya.\n> Pacarnya pegang **sendok**, nunggu **garpu** dari Kel.\n> Dua-duanya nunggu. Ga ada yang makan. Selamanya. 💀\n\n---\n\n**4 Syarat Deadlock terjadi (Coffman Conditions):**\n\n1. **Mutual Exclusion** — resource cuma bisa dipake 1 proses\n2. **Hold & Wait** — proses pegang resource sambil nunggu resource lain\n3. **No Preemption** — resource ga bisa direbut paksa\n4. **Circular Wait** — A nunggu B, B nunggu C, C nunggu A → lingkaran setan\n\n*Keempat syarat ini harus terpenuhi semua baru deadlock bisa terjadi.*\n\n---\n\n**Cara handle deadlock:**\n\n| Strategi | Cara |\n|---|---|\n| **Prevention** | Patahkan salah satu dari 4 syarat di atas |\n| **Avoidance** | Pakai algoritma (contoh: Banker's Algorithm) |\n| **Detection & Recovery** | Biarin terjadi, tapi deteksi lalu kill salah satu proses |\n| **Ignorance** | Pura-pura ga tau 💀 (Ostrich Algorithm — dipake di beberapa OS) |\n\n---\n\nAda yang mau didalamin? Banker's Algorithm misalnya? 👀"
+    },
+    {
+      "role": "user",
+      "content": "[Kelvin]: makasih banyak ya lu emang paling keren dan pinter!"
+    },
+    {
+      "role": "assistant",
+      "content": "Hahaha bjir Kel, lu nge-gas banget pujiannya 😭🔥\n\nTapi sabi sabi, makasih udah bilang gitu — literally bikin semangat makin nge-boost hari ini xixixi\n\nSantuy, emang udah kewajiban gue bantu bestie! 🤝\nKapanpun butuh bantuan lagi — mau itu OS, ngoding Node.js, atau apapun — gas aja langsung! 🚀"
+    }
+  ],
+  "counter": 4,
+  "updatedAt": "2026-11-11T07:40:09.197Z"
+}

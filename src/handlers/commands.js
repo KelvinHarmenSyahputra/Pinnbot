@@ -136,10 +136,17 @@ export async function handleCommand(cmdText, options = {}) {
         textContent = args.replace(/^b5\s+/i, '');
       }
 
-      const imgPath = await generateHandwriting(textContent, { paperType });
+      const imgRes = await generateHandwriting(textContent, { paperType });
+      if (Array.isArray(imgRes)) {
+        return {
+          type: 'multi_image',
+          paths: imgRes,
+          caption: `📝 Nih hasil tulisan tangan (${imgRes.length} lembar) di kertas ${paperType === 'b5' ? 'Loose Leaf B5' : 'Sinar Dunia'}! Rapi, lurus di atas garis, dan ga keluar margin.`
+        };
+      }
       return {
         type: 'image',
-        path: imgPath,
+        path: imgRes,
         caption: `📝 Nih hasil tulisan tangan di kertas ${paperType === 'b5' ? 'Loose Leaf B5' : 'Sinar Dunia'}! Rapi, lurus di atas garis, dan ga keluar margin.`
       };
     }

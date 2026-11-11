@@ -15,7 +15,6 @@ FONTS_DIR = os.path.join(PROJECT_ROOT, 'assets', 'fonts')
 GLYPHS_DIR = os.path.join(PROJECT_ROOT, 'assets', 'glyphs')
 RNN_DIR = os.path.join(PROJECT_ROOT, 'tools', 'rnn_handwriting')
 
-# Preload user extracted handwriting glyphs
 USER_GLYPHS = {}
 if os.path.exists(GLYPHS_DIR):
     for fn in os.listdir(GLYPHS_DIR):
@@ -37,7 +36,6 @@ USER_SYM_MAP = {
     '!': 'symbol_exclamation.png',
 }
 
-# Add RNN model to path
 if os.path.exists(RNN_DIR):
     sys.path.insert(0, RNN_DIR)
 
@@ -55,7 +53,6 @@ def get_rnn_model():
     return _rnn_model
 
 def load_canvas(paper_type='sidu'):
-    # Default: Real photograph of Sinar Dunia notebook
     sidu_photo = os.path.join(TEMPLATES_DIR, 'sidu_hd_template.jpg')
     lines_maps_json = os.path.join(TEMPLATES_DIR, 'horizontal_line_maps.json')
     lines_json = os.path.join(TEMPLATES_DIR, 'horizontal_lines.json')
@@ -71,7 +68,6 @@ def load_canvas(paper_type='sidu'):
             lines_y = json.load(f)
         return paper, lines_y, None, 115
 
-    # Loose Leaf B5 option
     b5_path = os.path.join(TEMPLATES_DIR, 'loose_leaf_b5.jpg')
     if os.path.exists(b5_path):
         paper = Image.open(b5_path).convert('RGB')
@@ -80,7 +76,6 @@ def load_canvas(paper_type='sidu'):
         lines_y = list(range(top_margin, ph - 120, 54))
         return paper, lines_y, None, 245
 
-    # Fallback
     width, height = 1500, 2300
     paper = Image.new('RGB', (width, height), (252, 251, 246))
     lines_y = list(range(180, height - 140, 54))
@@ -99,314 +94,261 @@ def get_exact_line_y(lines_y, line_maps, line_idx, x):
             if avail[i] <= x <= avail[i+1]:
                 t = (x - avail[i]) / (avail[i+1] - avail[i])
                 return (1-t) * m[str(avail[i])] + t * m[str(avail[i+1])]
-    return lines_y[line_idx]
+    if line_idx < len(lines_y):
+        return lines_y[line_idx]
+    return lines_y[-1] + 50
+
+def clean_markdown_for_handwriting(text):
+    lines = text.split('\n')
+    cleaned = []
+    in_code = False
+    for line in lines:
+        l = line.strip()
+        if l.startswith('```'):
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        if re.match(r'^\|?\s*[-:]+\s*\|', l):
+            continue
+        if l.startswith('|') and l.endswith('|'):
+            cells = [c.strip() for c in l.strip('|').split('|') if c.strip()]
+            if cells:
+                cleaned.append(' - ' + ' : '.join(cells))
+            continue
+        l = re.sub(r'^#+\s*', '', l)
+        l = re.sub(r'\*\*(.+?)\*\*', r'\1', l)
+        l = re.sub(r'__(.+?)__', r'\1', l)
+        l = re.sub(r'\*(.+?)\*', r'\1', l)
+        l = re.sub(r'_(.+?)_', r'\1', l)
+        l = re.sub(r'^\s*[\*\+]\s+', ' - ', l)
+        l = re.sub(r'^>\s*', '', l)
+        l = l.replace('*', '')
+        cleaned.append(l)
+    return '\n'.join(cleaned)
+
+def render_page_lines_rnn(chunk_lines, paper_template, lines_y, line_maps, content_left, pw, ph, rnn):
+    SS = 2
+    ink_canvas_ss = Image.new('RGB', (pw * SS, ph * SS), (255, 255, 255))
+    draw_ink_ss = ImageDraw.Draw(ink_canvas_ss)
+
+    start_line = 0
+    scale_x = 2.45 * SS
+    scale_y = 2.80 * SS
+    scale_glyph = 0.95 * SS
+
+    digit_font_path = os.path.join(FONTS_DIR, 'PlaypenSans.ttf')
+    digit_font = ImageFont.truetype(digit_font_path, 38) if os.path.exists(digit_font_path) else ImageFont.load_default()
+
+    for l_i, line_text in enumerate(chunk_lines):
+        line_idx = start_line + l_i
+        if line_idx + 1 >= len(lines_y): break
+        if not line_text.strip(): continue
+
+        ox = content_left * SS
+        if line_text.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
+            ox += 15 * SS
+        elif l_i == 0 or line_text.startswith(('Untuk itu', 'Adapun', 'Dengan demikian', 'Informasi', 'Perhitungan', 'Tanggal')):
+            ox += 40 * SS
+
+        cur_x = ox
+        line_slant_deg = random.uniform(9.0, 13.0)
+        line_slant = math.tan(math.radians(line_slant_deg))
+
+        tokens = re.findall(r'[a-zA-Z]+|[0-9]+|[^\s\w]', line_text)
+
+        for tok_i, tok in enumerate(tokens):
+            is_user_glyph = any(c.isdigit() or c in USER_SYM_MAP for c in tok)
+
+            if is_user_glyph:
+                for ch in tok:
+                    g = None
+                    if ch.isdigit():
+                        v = random.choice(['v1', 'v2'])
+                        g = USER_GLYPHS.get(f'digit_{ch}_{v}.png')
+                    elif ch in USER_SYM_MAP:
+                        g = USER_GLYPHS.get(USER_SYM_MAP[ch])
+
+                    cur_x_1x = cur_x / SS
+                    y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x_1x)
+
+                    if g is not None:
+                        gw = int(g.width * scale_glyph * random.uniform(0.97, 1.03))
+                        gh = int(g.height * scale_glyph * random.uniform(0.97, 1.03))
+                        g_s = g.resize((gw, gh), Image.Resampling.BILINEAR)
+                        rot = -line_slant_deg + random.uniform(-1.5, 1.5)
+                        g_s = g_s.rotate(rot, resample=Image.Resampling.BILINEAR, expand=True)
+
+                        if ch in ['.', ',']:
+                            dest_y = int(y_bottom * SS - g_s.height + 2 * SS)
+                        elif ch in ['-', '=', '+', ':']:
+                            dest_y = int(y_bottom * SS - 18 * SS - g_s.height // 2)
+                        else:
+                            dest_y = int(y_bottom * SS - g_s.height - 3 * SS)
+
+                        dest_x = int(cur_x)
+                        region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + g_s.width, dest_y + g_s.height)).convert('RGBA')
+                        region.alpha_composite(g_s)
+                        ink_canvas_ss.paste(region.convert('RGB'), (dest_x, dest_y))
+
+                        cur_x += g_s.width + int(3.0 * SS)
+                    else:
+                        ch_w = digit_font.getlength(ch)
+                        pad = 12
+                        stamp = Image.new('RGB', (int(ch_w) + pad*2, 54 + pad*2), (255, 255, 255))
+                        s_draw = ImageDraw.Draw(stamp)
+                        press = random.uniform(0.92, 1.08)
+                        ink_color = (int(14 * press), int(16 * press), int(22 * press))
+                        s_draw.text((pad, pad), ch, fill=ink_color, font=digit_font)
+                        rot = -line_slant_deg + random.uniform(-2.0, 2.0)
+                        stamp_rot = stamp.resize((int(stamp.width * SS * 0.8), int(stamp.height * SS * 0.8)), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
+                        dest_y = int((y_bottom - 40 - pad) * SS)
+                        dest_x = int(cur_x - pad * SS)
+                        region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
+                        blended = ImageChops.multiply(region, stamp_rot)
+                        ink_canvas_ss.paste(blended, (dest_x, dest_y))
+                        cur_x += int((ch_w * 0.8 + 2.5) * SS)
+
+                if tok_i + 1 < len(tokens) and tokens[tok_i+1] in ['.', ',', ')']:
+                    cur_x += int(3 * SS)
+                else:
+                    cur_x += int(14 * SS)
+
+            else:
+                safe_text = ''.join(c for c in tok if c in rnn.vocabulary)
+                if not safe_text:
+                    cur_x += int(20 * SS)
+                    continue
+
+                pts = None
+                p_res = None
+                for seed_offset in range(8):
+                    seed = 1000 + l_i * 333 + tok_i * 77 + seed_offset * 19 + random.randint(10, 9999)
+                    budget = len(safe_text) * 85
+                    p_res, reason = rnn.sample(safe_text, style=10, bias=0.40, seed=seed, budget=budget)
+                    if reason == 'finished':
+                        pts = p_res
+                        break
+                if pts is None and p_res is not None:
+                    pts = p_res
+                elif pts is None:
+                    continue
+
+                pts_x = np.array([p[0] for p in pts])
+                pts_y = np.array([p[1] for p in pts])
+
+                if len(pts) > 15:
+                    poly = np.polyfit(pts_x, pts_y, 2)
+                    drift = np.polyval(poly, pts_x)
+                else:
+                    drift = np.zeros(len(pts))
+
+                word_jitter_y = random.uniform(-1.8, 1.8) * SS
+                word_slant = line_slant + math.tan(math.radians(random.uniform(-1.5, 1.5)))
+
+                prev = None
+                prev_coord = None
+                for idx_p, p in enumerate(pts):
+                    d_val = float(drift[idx_p])
+                    corrected_y = (p[1] - d_val) * scale_y
+                    raw_x = p[0] * scale_x + cur_x
+
+                    y_bottom_ss = get_exact_line_y(lines_y, line_maps, line_idx + 1, raw_x / SS) * SS
+                    p_cur_y = corrected_y + y_bottom_ss - (9.5 * SS) + word_jitter_y
+
+                    y_diff = (y_bottom_ss - 9.5 * SS) - p_cur_y
+                    p_cur_x = raw_x + y_diff * word_slant
+
+                    coord = (p_cur_x, p_cur_y)
+
+                    if prev is not None and prev[2] == 0 and prev_coord is not None:
+                        dx = p_cur_x - prev_coord[0]
+                        dy = p_cur_y - prev_coord[1]
+                        dist = math.hypot(dx, dy)
+
+                        is_downstroke = (dy > 0)
+                        base_w = 5.6 if is_downstroke else 4.0
+                        stroke_w = max(3.2, min(6.5, base_w - dist * 0.05))
+
+                        press = random.uniform(0.95, 1.05)
+                        r = int(14 * press)
+                        g = int(16 * press)
+                        b = int(22 * press)
+
+                        draw_ink_ss.line([prev_coord, coord], fill=(r, g, b), width=int(round(stroke_w)))
+                        rad = stroke_w / 2.0
+                        draw_ink_ss.ellipse([coord[0] - rad, coord[1] - rad, coord[0] + rad, coord[1] + rad], fill=(r, g, b))
+
+                    prev = p
+                    prev_coord = coord
+
+                word_w = (max(pts_x) - min(pts_x)) * scale_x if len(pts_x) > 0 else 20 * SS
+                if tok_i + 1 < len(tokens) and tokens[tok_i+1] in [':', ';', ',', '.', '!', '?']:
+                    cur_x += int(word_w + 6 * SS)
+                else:
+                    cur_x += int(word_w + random.uniform(20.0, 26.0) * SS)
+
+    ink_1x = ink_canvas_ss.resize((pw, ph), Image.Resampling.LANCZOS)
+    ink_smooth = ink_1x.filter(ImageFilter.GaussianBlur(radius=0.18))
+    return ImageChops.multiply(paper_template.copy(), ink_smooth)
 
 def render_handwriting(text, output_path, font_path=None, name="", nim="", date="", paper_type="sidu"):
+    clean_text = clean_markdown_for_handwriting(text)
     paper, lines_y, line_maps, content_left = load_canvas(paper_type)
     pw, ph = paper.size
 
-    # White canvas for multiply blend
-    ink_white = Image.new('RGB', (pw, ph), (255, 255, 255))
-    draw_ink = ImageDraw.Draw(ink_white)
-
     rnn = get_rnn_model()
-    use_rnn = (font_path != 'font' and rnn is not None)
+    max_width = pw - content_left - 80
 
-    if use_rnn and rnn is not None:
-        print("ENGINE: USING NEURAL NETWORK RNN (ALEX GRAVES STYLE 10)")
-        max_width = pw - content_left - 80
+    raw_lines = []
+    if name or nim or date:
+        header_parts = []
+        if name: header_parts.append(f"Nama : {name}")
+        if nim: header_parts.append(f"NIM  : {nim}")
+        if date: header_parts.append(f"Tgl  : {date}")
+        raw_lines.append("   |   ".join(header_parts))
+        raw_lines.append("")
 
-        raw_lines = []
-        if name or nim or date:
-            header_parts = []
-            if name: header_parts.append(f"Nama : {name}")
-            if nim: header_parts.append(f"NIM  : {nim}")
-            if date: header_parts.append(f"Tgl  : {date}")
-            raw_lines.append("   |   ".join(header_parts))
+    for para in clean_text.split('\n'):
+        p_clean = para.strip()
+        if not p_clean:
             raw_lines.append("")
-
-        for para in text.split('\n'):
-            p_clean = para.strip()
-            if not p_clean:
-                raw_lines.append("")
-                continue
-            words = p_clean.split(' ')
-            cur = []
-            for w in words:
-                test = ' '.join(cur + [w])
-                if len(test) * 23.5 <= max_width:
-                    cur.append(w)
-                else:
-                    raw_lines.append(' '.join(cur))
-                    cur = [w]
-            if cur:
+            continue
+        words = p_clean.split(' ')
+        cur = []
+        for w in words:
+            test = ' '.join(cur + [w])
+            if len(test) * 23.5 <= max_width:
+                cur.append(w)
+            else:
                 raw_lines.append(' '.join(cur))
+                cur = [w]
+        if cur:
+            raw_lines.append(' '.join(cur))
 
-        # Start higher up on Line 1 with 2x supersampling
-        SS = 2
-        ink_canvas_ss = Image.new('RGB', (pw * SS, ph * SS), (255, 255, 255))
-        draw_ink_ss = ImageDraw.Draw(ink_canvas_ss)
+    MAX_LINES_PER_PAGE = 26
+    page_chunks = []
+    for i in range(0, len(raw_lines), MAX_LINES_PER_PAGE):
+        page_chunks.append(raw_lines[i:i + MAX_LINES_PER_PAGE])
+    if not page_chunks:
+        page_chunks = [[]]
 
-        start_line = 0
-        scale_x = 2.45 * SS
-        scale_y = 2.80 * SS
+    out_dir = os.path.dirname(os.path.abspath(output_path))
+    os.makedirs(out_dir, exist_ok=True)
+    base_name, ext = os.path.splitext(output_path)
 
-        digit_font_path = os.path.join(FONTS_DIR, 'PlaypenSans.ttf')
-        digit_font = ImageFont.truetype(digit_font_path, 38) if os.path.exists(digit_font_path) else ImageFont.load_default()
-
-        for l_i, line_text in enumerate(raw_lines):
-            line_idx = start_line + l_i
-            if line_idx + 1 >= len(lines_y): break
-            if not line_text.strip(): continue
-
-            ox = content_left * SS
-            if line_text.startswith(('1.', '2.', '3.', '4.', '5.')):
-                ox += 15 * SS
-            elif l_i == 0 or line_text.startswith(('Untuk itu', 'Adapun', 'Dengan demikian')):
-                ox += 40 * SS
-
-            cur_x = ox
-            line_slant_deg = random.uniform(9.0, 13.0)
-            line_slant = math.tan(math.radians(line_slant_deg))
-
-            # Tokenize words, numbers, and symbols cleanly
-            tokens = re.findall(r'[a-zA-Z]+|[0-9]+|[^\s\w]', line_text)
-
-            for tok_i, tok in enumerate(tokens):
-                # Is it a number or symbol?
-                is_user_glyph = any(c.isdigit() or c in USER_SYM_MAP for c in tok)
-
-                if is_user_glyph:
-                    scale_glyph = 0.95 * SS
-                    for ch in tok:
-                        g = None
-                        if ch.isdigit():
-                            v = random.choice(['v1', 'v2'])
-                            g = USER_GLYPHS.get(f'digit_{ch}_{v}.png')
-                        elif ch in USER_SYM_MAP:
-                            g = USER_GLYPHS.get(USER_SYM_MAP[ch])
-
-                        cur_x_1x = cur_x / SS
-                        y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x_1x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
-
-                        if g is not None:
-                            gw = int(g.width * scale_glyph * random.uniform(0.97, 1.03))
-                            gh = int(g.height * scale_glyph * random.uniform(0.97, 1.03))
-                            g_s = g.resize((gw, gh), Image.Resampling.BILINEAR)
-                            rot = -line_slant_deg + random.uniform(-1.5, 1.5)
-                            g_s = g_s.rotate(rot, resample=Image.Resampling.BILINEAR, expand=True)
-
-                            if ch in ['.', ',']:
-                                dest_y = int(y_bottom * SS - g_s.height + 2 * SS)
-                            elif ch in ['-', '=', '+', ':']:
-                                dest_y = int(y_bottom * SS - 18 * SS - g_s.height // 2)
-                            else: # Digits, (), ?, !, /
-                                dest_y = int(y_bottom * SS - g_s.height - 3 * SS)
-
-                            dest_x = int(cur_x)
-                            region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + g_s.width, dest_y + g_s.height)).convert('RGBA')
-                            region.alpha_composite(g_s)
-                            ink_canvas_ss.paste(region.convert('RGB'), (dest_x, dest_y))
-
-                            cur_x += g_s.width + int(3.0 * SS)
-                        else:
-                            ch_w = digit_font.getlength(ch)
-                            pad = 12
-                            stamp = Image.new('RGB', (int(ch_w) + pad*2, 54 + pad*2), (255, 255, 255))
-                            s_draw = ImageDraw.Draw(stamp)
-                            press = random.uniform(0.92, 1.08)
-                            ink_color = (int(14 * press), int(16 * press), int(22 * press))
-                            s_draw.text((pad, pad), ch, fill=ink_color, font=digit_font)
-                            rot = -line_slant_deg + random.uniform(-2.0, 2.0)
-                            stamp_rot = stamp.resize((int(stamp.width * SS * 0.8), int(stamp.height * SS * 0.8)), Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
-                            dest_y = int((y_bottom - 40 - pad) * SS)
-                            dest_x = int(cur_x - pad * SS)
-                            region = ink_canvas_ss.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
-                            blended = ImageChops.multiply(region, stamp_rot)
-                            ink_canvas_ss.paste(blended, (dest_x, dest_y))
-                            cur_x += int((ch_w * 0.8 + 2.5) * SS)
-
-                    # Spacing after symbol/number token
-                    if tok_i + 1 < len(tokens) and tokens[tok_i+1] in ['.', ',', ')']:
-                        cur_x += int(3 * SS)
-                    else:
-                        cur_x += int(14 * SS)
-
-                else:
-                    safe_text = ''.join(c for c in tok if c in rnn.vocabulary)
-                    if not safe_text:
-                        cur_x += int(20 * SS)
-                        continue
-
-                    pts = None
-                    p_res = None
-                    for seed_offset in range(8):
-                        seed = 1000 + l_i * 333 + tok_i * 77 + seed_offset * 19 + random.randint(10, 9999)
-                        budget = len(safe_text) * 85
-                        # Bias 0.40: High human organic entropy, natural stroke variation, loose student notes (anti-stiff font!)
-                        p_res, reason = rnn.sample(safe_text, style=10, bias=0.40, seed=seed, budget=budget)
-                        if reason == 'finished':
-                            pts = p_res
-                            break
-                    if pts is None and p_res is not None:
-                        pts = p_res
-                    elif pts is None:
-                        continue
-
-                    pts_x = np.array([p[0] for p in pts])
-                    pts_y = np.array([p[1] for p in pts])
-
-                    if len(pts) > 15:
-                        poly = np.polyfit(pts_x, pts_y, 2)
-                        drift = np.polyval(poly, pts_x)
-                    else:
-                        drift = np.zeros(len(pts))
-
-                    word_jitter_y = random.uniform(-1.8, 1.8) * SS
-                    word_slant = line_slant + math.tan(math.radians(random.uniform(-1.5, 1.5)))
-
-                    prev = None
-                    prev_coord = None
-                    for idx_p, p in enumerate(pts):
-                        d_val = float(drift[idx_p])
-                        corrected_y = (p[1] - d_val) * scale_y
-                        raw_x = p[0] * scale_x + cur_x
-
-                        y_bottom_ss = (get_exact_line_y(lines_y, line_maps, line_idx + 1, raw_x / SS) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50) * SS
-                        p_cur_y = corrected_y + y_bottom_ss - (9.5 * SS) + word_jitter_y
-
-                        y_diff = (y_bottom_ss - 9.5 * SS) - p_cur_y
-                        p_cur_x = raw_x + y_diff * word_slant
-
-                        coord = (p_cur_x, p_cur_y)
-
-                        if prev is not None and prev[2] == 0 and prev_coord is not None:
-                            dx = p_cur_x - prev_coord[0]
-                            dy = p_cur_y - prev_coord[1]
-                            dist = math.hypot(dx, dy)
-
-                            is_downstroke = (dy > 0)
-                            base_w = 5.6 if is_downstroke else 4.0
-                            stroke_w = max(3.2, min(6.5, base_w - dist * 0.05))
-
-                            press = random.uniform(0.95, 1.05)
-                            r = int(14 * press)
-                            g = int(16 * press)
-                            b = int(22 * press)
-
-                            draw_ink_ss.line([prev_coord, coord], fill=(r, g, b), width=int(round(stroke_w)))
-                            rad = stroke_w / 2.0
-                            draw_ink_ss.ellipse([coord[0] - rad, coord[1] - rad, coord[0] + rad, coord[1] + rad], fill=(r, g, b))
-
-                        prev = p
-                        prev_coord = coord
-
-                    word_w = (max(pts_x) - min(pts_x)) * scale_x if len(pts_x) > 0 else 20 * SS
-                    if tok_i + 1 < len(tokens) and tokens[tok_i+1] in [':', ';', ',', '.', '!', '?']:
-                        cur_x += int(word_w + 6 * SS)
-                    else:
-                        cur_x += int(word_w + random.uniform(20.0, 26.0) * SS)
-
-        # Downsample back to 1x with Lanczos for photo-realistic analog edge
-        ink_white = ink_canvas_ss.resize((pw, ph), Image.Resampling.LANCZOS)
-
+    if len(page_chunks) == 1:
+        img_page = render_page_lines_rnn(page_chunks[0], paper, lines_y, line_maps, content_left, pw, ph, rnn)
+        img_page.save(output_path, "JPEG", quality=95)
+        return output_path
     else:
-        print("ENGINE: USING FONT FALLBACK")
-        # Authentic clean, bold student print-script (NON-CURSIVE, cetak lepas, jelas dan rapi)
-        # Default font: PlaypenSans
-        if not font_path or not os.path.exists(font_path) or font_path == 'rnn':
-            playpen = os.path.join(FONTS_DIR, 'PlaypenSans.ttf')
-            font_path = playpen if os.path.exists(playpen) else os.path.join(FONTS_DIR, 'HandwritingCR-2.ttf')
-
-        font_size = 38
-
-        font = ImageFont.truetype(font_path, font_size) if os.path.exists(font_path) else ImageFont.load_default()
-        max_width = pw - content_left - 80
-
-        wrapped_lines = []
-        if name or nim or date:
-            header_parts = []
-            if name: header_parts.append(f"Nama : {name}")
-            if nim: header_parts.append(f"NIM  : {nim}")
-            if date: header_parts.append(f"Tgl  : {date}")
-            wrapped_lines.append("   |   ".join(header_parts))
-            wrapped_lines.append("")
-
-        for para in text.split('\n'):
-            p_clean = para.strip()
-            if not p_clean:
-                wrapped_lines.append("")
-                continue
-            words = p_clean.split(' ')
-            cur = []
-            for w in words:
-                test = ' '.join(cur + [w])
-                if font.getlength(test) <= max_width:
-                    cur.append(w)
-                else:
-                    wrapped_lines.append(' '.join(cur))
-                    cur = [w]
-            if cur:
-                wrapped_lines.append(' '.join(cur))
-
-        # START AT THE VERY TOP: Line 1 (index 0, y ~ 131)
-        start_line = 0
-
-        for l_i, line_text in enumerate(wrapped_lines):
-            line_idx = start_line + l_i
-            if line_idx >= len(lines_y): break
-            if not line_text.strip(): continue
-
-            cur_x = content_left
-            if line_text.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '9.')):
-                cur_x += 15
-            elif l_i == 0 or line_text.startswith(('Untuk itu', 'Adapun', 'Dengan demikian')):
-                cur_x += 40
-
-            words = line_text.split(' ')
-            sent_p = random.uniform(0.95, 1.04)
-
-            for word in words:
-                w_len = int(font.getlength(word)) + 6
-                w_h = font_size + 24
-                pad = 12
-
-                stamp = Image.new('RGB', (w_len + pad * 2, w_h + pad * 2), (255, 255, 255))
-                s_draw = ImageDraw.Draw(stamp)
-
-                # Real Zebra Kokoro / Joyko regular 0.5mm gel pen (not bold)
-                p = sent_p * random.uniform(0.97, 1.03)
-                shade = int(16 * p)
-                ink_color = (shade, shade + 2, shade + 6)
-
-                s_draw.text((pad, pad), word, fill=ink_color, font=font)
-
-                # Word-level micro-rotation (-0.5 to +0.5 deg)
-                rot = random.uniform(-0.5, 0.5)
-                new_sz = (int(stamp.width), int(stamp.height))
-                stamp_rot = stamp.resize(new_sz, Image.Resampling.BILINEAR).rotate(rot, resample=Image.Resampling.BILINEAR, fillcolor=(255, 255, 255))
-
-                y_bottom = get_exact_line_y(lines_y, line_maps, line_idx + 1, cur_x) if line_idx + 1 < len(lines_y) else lines_y[-1] + 50
-                jitter_y = random.uniform(-0.5, 0.5)
-                # Float ~8px above the bottom line so base letters sit right in the middle zone between upper line and lower line!
-                dest_y = int(y_bottom - 8.0 - 43 - pad + jitter_y)
-                dest_x = int(cur_x - pad)
-
-                region = ink_white.crop((dest_x, dest_y, dest_x + stamp_rot.width, dest_y + stamp_rot.height))
-                blended = ImageChops.multiply(region, stamp_rot)
-                ink_white.paste(blended, (dest_x, dest_y))
-
-                cur_x += w_len + font.getlength(' ') + random.uniform(-0.4, 1.0)
-
-    # Micro ink-bleed into paper fiber
-    ink_smooth = ink_white.filter(ImageFilter.GaussianBlur(radius=0.25))
-
-    # Genuine Multiply blend onto real paper photograph
-    final_image = ImageChops.multiply(paper, ink_smooth)
-
-    os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
-    final_image.save(output_path, "JPEG", quality=95)
-    return output_path
+        generated_paths = []
+        for p_i, chunk in enumerate(page_chunks):
+            p_path = f"{base_name}_p{p_i+1}{ext}"
+            img_page = render_page_lines_rnn(chunk, paper, lines_y, line_maps, content_left, pw, ph, rnn)
+            img_page.save(p_path, "JPEG", quality=95)
+            generated_paths.append(p_path)
+        return ",".join(generated_paths)
 
 if __name__ == '__main__':
     if len(sys.argv) < 3:

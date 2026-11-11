@@ -72,10 +72,17 @@ export async function processIncomingMessage(msgContext) {
             };
           }
 
+          // Cache last document in memory for this chat
+          memory.setLastDocument(chatId, {
+            filename: media.filename,
+            totalPages: pdfData.totalPages,
+            text: pdfData.text
+          });
+
           const userInstruction = rawText || 'Tolong baca, rangkum, dan jelaskan poin-poin penting isi dokumen ini dengan jelas dan santai.';
           const prompt = `Pengguna mengirimkan file PDF "${media.filename}" (${pdfData.totalPages} halaman).\n\n[ISI DOKUMEN PDF]:\n${pdfData.text}\n\n[INSTRUKSI PENGGUNA]:\n${userInstruction}`;
 
-          const aiRes = await chatCompletion(prompt, { senderName });
+          const aiRes = await chatCompletion(prompt, { senderName, chatId });
           return {
             type: 'text',
             content: `📑 *Analisis PDF: ${media.filename}* (${pdfData.totalPages} hal)\n\n${aiRes.reply}`
@@ -155,6 +162,7 @@ export async function processIncomingMessage(msgContext) {
     messageQueue.push({
       prompt: cleanPrompt,
       senderName,
+      chatId,
       resolve,
       reject
     });
@@ -168,7 +176,10 @@ async function triggerQueue() {
 
   const item = messageQueue.shift();
   try {
-    const res = await chatCompletion(item.prompt, { senderName: item.senderName });
+    const res = await chatCompletion(item.prompt, {
+      senderName: item.senderName,
+      chatId: item.chatId
+    });
     item.resolve({
       type: 'text',
       content: res.reply,

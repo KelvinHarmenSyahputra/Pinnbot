@@ -1,0 +1,14 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Rapikan teks berikut menjadi paragraf formal akademis yang terstruktur rapi, tanpa kata-kata pengantar/basa-basi, langsung teks intinya saja:\n\nModel OSI memiliki 7 lapisan mulai dari Physical layer sampai Application layer."
+    },
+    {
+      "role": "assistant",
+      "content": "## Model OSI\n\nModel OSI (*Open Systems Interconnection*) terdiri atas tujuh lapisan hierarkis yang masing-masing memiliki fungsi spesifik dalam proses komunikasi data. Ketujuh lapisan tersebut, dimulai dari lapisan terbawah hingga teratas, adalah sebagai berikut.\n\n1. **Physical Layer** — bertanggung jawab atas transmisi data mentah berupa sinyal fisik (elektrik, optik, atau nirkabel) melalui media komunikasi.\n2. **Data Link Layer** — mengelola pengiriman data antar-node yang terhubung langsung, termasuk deteksi dan koreksi kesalahan pada level frame.\n3. **Network Layer** — menangani pengalamatan logis dan penentuan rute (*routing*) paket data antar-jaringan yang berbeda.\n4. **Transport Layer** — menjamin keandalan pengiriman data secara *end-to-end*, termasuk segmentasi, kontrol aliran, dan pemulihan kesalahan.\n5. **Session Layer** — mengatur pembukaan, pemeliharaan, dan penutupan sesi komunikasi antar-aplikasi.\n6. **Presentation Layer** — bertanggung jawab atas representasi data, termasuk enkripsi, dekripsi, dan konversi format.\n7. **Application Layer** — menyediakan antarmuka langsung bagi pengguna dan aplikasi untuk mengakses layanan jaringan."
+    }
+  ],
+  "counter": 2,
+  "updatedAt": "2026-11-11T07:40:17.143Z"
+}

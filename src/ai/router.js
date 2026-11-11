@@ -17,19 +17,26 @@ export async function chatCompletion(userMessage, options = {}) {
   const {
     customSystemPrompt = null,
     temperature = 0.7,
-    senderName = ''
+    senderName = '',
+    chatId = 'default'
   } = options;
 
   const currentMood = memory.getMood();
   const facts = memory.getFactsString();
-  const systemPrompt = customSystemPrompt || getSystemPrompt(currentMood, facts);
+  let systemPrompt = customSystemPrompt || getSystemPrompt(currentMood, facts);
+
+  // If there is a cached last document in this chat, remind AI about it
+  const lastDoc = memory.getLastDocument(chatId);
+  if (lastDoc && lastDoc.text) {
+    systemPrompt += `\n\n[DOKUMEN AKTIF TERAKHIR DI CHAT INI: "${lastDoc.filename}"]:\n${lastDoc.text.slice(0, 8000)}\n(Gunakan isi dokumen di atas jika user menanyakan tugas, materi, atau soal terkait dokumen/PDF tersebut)`;
+  }
 
   // Append user message to memory
-  memory.addMessage('user', userMessage, senderName);
+  memory.addMessage('user', userMessage, senderName, chatId);
 
   const payloadMessages = [
     { role: 'system', content: systemPrompt },
-    ...memory.getMessages()
+    ...memory.getMessages(chatId)
   ];
 
   const headers = {
@@ -74,7 +81,7 @@ export async function chatCompletion(userMessage, options = {}) {
   const reply = data.choices?.[0]?.message?.content || 'Aduh, lagi ngeblank nih...';
 
   // Append assistant message to memory
-  memory.addMessage('assistant', reply);
+  memory.addMessage('assistant', reply, '', chatId);
 
   return {
     reply,

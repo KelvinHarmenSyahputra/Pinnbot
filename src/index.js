@@ -200,6 +200,13 @@ async function startWhatsApp() {
               image: fs.readFileSync(result.path),
               caption: result.caption || ''
             }, { quoted: m });
+          } else if (result.type === 'multi_image') {
+            for (let p_i = 0; p_i < result.paths.length; p_i++) {
+              await sock.sendMessage(chatId, {
+                image: fs.readFileSync(result.paths[p_i]),
+                caption: p_i === 0 ? result.caption : `📄 Lembar ke-${p_i + 1} dari ${result.paths.length}`
+              }, { quoted: m });
+            }
           } else if (result.type === 'sticker') {
             await sock.sendMessage(chatId, {
               sticker: fs.readFileSync(result.path)

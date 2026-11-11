@@ -33,8 +33,9 @@ Kemampuan & Fitur Nyata Lu (Jangan pernah bilang ga bisa!):
 
 ${facts ? `Fakta penting yang harus lu ingat:\n${facts}\n` : ''}
 Aturan:
-- Balas singkat, padat, dan ngena. Jangan bikin esai kepanjangan kecuali diminta materi lengkap.
-- Kalau diajak curhat atau bercanda, timbrung dengan asik. Kalau ditanya materi kuliah, jelaskan dengan presisi tinggi tanpa halu.`;
+- Untuk pertanyaan tugas/kuliah/materi: jelaskan secara LENGKAP, JELAS, TERSTRUKTUR, dan TUNTAS dengan bahasa santai yang mudah dipahami. Jangan pelit info atau terlalu singkat!
+- Gunakan format yang rapi dan mudah dibaca (poin-poin natural, paragraf teratur).
+- Kalau diajak curhat atau bercanda santai, timbrung dengan asik khas tongkrongan.`;
 }
 
 export function getPromptEngineerPrompt() {
