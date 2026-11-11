@@ -71,7 +71,7 @@ function startLocalServer() {
 async function startWhatsApp() {
   console.log('[Pinnbot] Starting Baileys WhatsApp connection...');
   try {
-    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage } = await import('@whiskeysockets/baileys');
+    const { default: makeWASocket, useMultiFileAuthState, DisconnectReason, downloadMediaMessage, normalizeMessageContent } = await import('@whiskeysockets/baileys');
     const qrcode = (await import('qrcode-terminal')).default;
     const pino = (await import('pino')).default;
 
@@ -106,72 +106,80 @@ async function startWhatsApp() {
         try {
           if (!m.message || m.key.fromMe) continue;
 
+          const normMsg = normalizeMessageContent(m.message) || m.message;
           const chatId = m.key.remoteJid;
-        const senderName = m.pushName || 'Anon';
-        const msgType = Object.keys(m.message)[0];
+          const senderName = m.pushName || 'Anon';
+          const msgType = Object.keys(normMsg)[0];
 
-        let rawText = m.message.conversation ||
-          m.message.extendedTextMessage?.text ||
-          m.message.imageMessage?.caption ||
-          m.message.documentMessage?.caption || '';
+          let rawText = normMsg.conversation ||
+            normMsg.extendedTextMessage?.text ||
+            normMsg.imageMessage?.caption ||
+            normMsg.documentMessage?.caption ||
+            normMsg.documentWithCaptionMessage?.message?.documentMessage?.caption || '';
 
-        const contextInfo = m.message[msgType]?.contextInfo || m.message.extendedTextMessage?.contextInfo;
-        const isMentioned = contextInfo?.mentionedJid?.includes(sock.user?.id.split(':')[0] + '@s.whatsapp.net');
-        const isReplyToBot = contextInfo?.participant === (sock.user?.id.split(':')[0] + '@s.whatsapp.net');
+          const contextInfo = normMsg[msgType]?.contextInfo || normMsg.extendedTextMessage?.contextInfo;
 
-        // Check if there is media attached directly or in quoted message
-        let media = null;
+          const botPhone = sock.user?.id?.split(':')[0]?.split('@')[0] || '';
+          const botLid = sock.user?.lid?.split(':')[0]?.split('@')[0] || '';
 
-        const directDoc = m.message.documentMessage || m.message.documentWithCaptionMessage?.message?.documentMessage;
-        const directImg = m.message.imageMessage || m.message.viewOnceMessage?.message?.imageMessage;
+          const isMentioned = Boolean(contextInfo?.mentionedJid?.some(j => (botPhone && j.includes(botPhone)) || (botLid && j.includes(botLid))));
+          const isReplyToBot = Boolean((botPhone && contextInfo?.participant?.includes(botPhone)) || (botLid && contextInfo?.participant?.includes(botLid)));
 
-        const quotedMsg = contextInfo?.quotedMessage;
-        const quotedDoc = quotedMsg?.documentMessage || quotedMsg?.documentWithCaptionMessage?.message?.documentMessage;
-        const quotedImg = quotedMsg?.imageMessage || quotedMsg?.viewOnceMessage?.message?.imageMessage;
+          console.log(`\n📩 [WhatsApp IN] from: ${senderName} (${chatId}) | type: ${msgType} | text: "${rawText}" | mention: ${isMentioned} | replyToBot: ${isReplyToBot}`);
 
-        const docMsg = directDoc || quotedDoc;
-        const imgMsg = directImg || quotedImg;
+          // Check if there is media attached directly or in quoted message
+          let media = null;
 
-        if (docMsg) {
-          try {
-            const targetMsg = directDoc ? m : {
-              key: {
-                id: contextInfo.stanzaId,
-                remoteJid: chatId,
-                participant: contextInfo.participant
-              },
-              message: { documentMessage: docMsg }
-            };
-            const buffer = await downloadMediaMessage(targetMsg, 'buffer', {}, {
-              reuploadRequest: sock.updateMediaMessage
-            });
-            const originalName = docMsg.fileName || 'file.bin';
-            const tempPath = path.join(config.rootDir, 'temp', `doc_${Date.now()}_${originalName}`);
-            fs.writeFileSync(tempPath, buffer);
-            media = { type: 'document', path: tempPath, filename: originalName };
-          } catch (e) {
-            console.error('Failed to download document:', e);
+          const directDoc = normMsg.documentMessage || normMsg.documentWithCaptionMessage?.message?.documentMessage;
+          const directImg = normMsg.imageMessage || normMsg.viewOnceMessage?.message?.imageMessage;
+
+          const quotedMsg = normalizeMessageContent(contextInfo?.quotedMessage) || contextInfo?.quotedMessage;
+          const quotedDoc = quotedMsg?.documentMessage || quotedMsg?.documentWithCaptionMessage?.message?.documentMessage;
+          const quotedImg = quotedMsg?.imageMessage || quotedMsg?.viewOnceMessage?.message?.imageMessage;
+
+          const docMsg = directDoc || quotedDoc;
+          const imgMsg = directImg || quotedImg;
+
+          if (docMsg) {
+            try {
+              const targetMsg = directDoc ? m : {
+                key: {
+                  id: contextInfo.stanzaId,
+                  remoteJid: chatId,
+                  participant: contextInfo.participant
+                },
+                message: { documentMessage: docMsg }
+              };
+              const buffer = await downloadMediaMessage(targetMsg, 'buffer', {}, {
+                reuploadRequest: sock.updateMediaMessage
+              });
+              const originalName = docMsg.fileName || 'file.bin';
+              const tempPath = path.join(config.rootDir, 'temp', `doc_${Date.now()}_${originalName}`);
+              fs.writeFileSync(tempPath, buffer);
+              media = { type: 'document', path: tempPath, filename: originalName };
+            } catch (e) {
+              console.error('Failed to download document:', e);
+            }
+          } else if (imgMsg) {
+            try {
+              const targetMsg = directImg ? m : {
+                key: {
+                  id: contextInfo.stanzaId,
+                  remoteJid: chatId,
+                  participant: contextInfo.participant
+                },
+                message: { imageMessage: imgMsg }
+              };
+              const buffer = await downloadMediaMessage(targetMsg, 'buffer', {}, {
+                reuploadRequest: sock.updateMediaMessage
+              });
+              const tempPath = path.join(config.rootDir, 'temp', `img_${Date.now()}.jpg`);
+              fs.writeFileSync(tempPath, buffer);
+              media = { type: 'image', path: tempPath };
+            } catch (e) {
+              console.error('Failed to download image:', e);
+            }
           }
-        } else if (imgMsg) {
-          try {
-            const targetMsg = directImg ? m : {
-              key: {
-                id: contextInfo.stanzaId,
-                remoteJid: chatId,
-                participant: contextInfo.participant
-              },
-              message: { imageMessage: imgMsg }
-            };
-            const buffer = await downloadMediaMessage(targetMsg, 'buffer', {}, {
-              reuploadRequest: sock.updateMediaMessage
-            });
-            const tempPath = path.join(config.rootDir, 'temp', `img_${Date.now()}.jpg`);
-            fs.writeFileSync(tempPath, buffer);
-            media = { type: 'image', path: tempPath };
-          } catch (e) {
-            console.error('Failed to download image:', e);
-          }
-        }
 
         const result = await processIncomingMessage({
           chatId,
@@ -184,6 +192,7 @@ async function startWhatsApp() {
         });
 
         if (result) {
+          console.log(`📤 [WhatsApp OUT] Replying to ${chatId} with type: ${result.type}`);
           if (result.type === 'text') {
             await sock.sendMessage(chatId, { text: result.content }, { quoted: m });
           } else if (result.type === 'image') {
@@ -203,6 +212,8 @@ async function startWhatsApp() {
               caption: result.caption || ''
             }, { quoted: m });
           }
+        } else {
+          console.log(`ℹ️ [WhatsApp IGNORED] Message from ${senderName} was not addressed to bot (trigger filter).`);
         }
       } catch (msgErr) {
         console.error('[WhatsApp] Error handling message:', msgErr);
